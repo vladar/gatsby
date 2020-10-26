@@ -248,6 +248,7 @@ export interface IGatsbyState {
     types: Array<
       string | { typeOrTypeDef: DocumentNode; plugin: IGatsbyPlugin }
     >
+    nextSchema: null | GraphQLSchema
   }
   themes: any // TODO
   logs: IGatsbyCLIState

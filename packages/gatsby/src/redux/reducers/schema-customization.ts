@@ -3,6 +3,7 @@ import { IGatsbyState, ActionsUnion } from "../types"
 const initialState = (): IGatsbyState["schemaCustomization"] => {
   return {
     composer: null,
+    nextSchema: null,
     context: {},
     fieldExtensions: {},
     printConfig: null,
@@ -82,6 +83,11 @@ export const schemaCustomizationReducer = (
       }
     case `DELETE_CACHE`:
       return initialState()
+    case `SET_SCHEMA`:
+      return {
+        ...state,
+        nextSchema: action.payload,
+      }
     default:
       return state
   }
