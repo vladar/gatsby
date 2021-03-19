@@ -7,6 +7,7 @@ import { emitter } from "../redux"
 export async function recompile({
   webpackWatching,
 }: IBuildContext): Promise<Stats> {
+  return
   if (!webpackWatching) {
     reporter.panic(`Missing compiler`)
   }

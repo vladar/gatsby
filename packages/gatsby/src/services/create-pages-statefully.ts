@@ -7,6 +7,8 @@ export async function createPagesStatefully({
   gatsbyNodeGraphQLFunction,
   deferNodeMutation,
 }: Partial<IDataLayerContext>): Promise<void> {
+  return
+
   // A variant on createPages for plugins that want to
   // have full control over adding/removing pages. The normal
   // "createPages" API is called every time (during development)

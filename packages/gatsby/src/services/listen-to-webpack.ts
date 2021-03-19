@@ -5,6 +5,7 @@ import reporter from "gatsby-cli/lib/reporter"
 export const createWebpackWatcher = (compiler: Compiler): InvokeCallback => (
   callback
 ): void => {
+  return
   compiler.hooks.invalid.tap(`file invalidation`, file => {
     reporter.verbose(`Webpack file changed: ${file}`)
     callback({ type: `SOURCE_FILE_CHANGED`, file })

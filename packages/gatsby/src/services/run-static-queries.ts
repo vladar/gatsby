@@ -10,6 +10,7 @@ export async function runStaticQueries({
   program,
   graphqlRunner,
 }: Partial<IQueryRunningContext>): Promise<void> {
+  return
   assertStore(store)
 
   if (!queryIds) {
