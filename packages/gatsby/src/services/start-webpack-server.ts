@@ -21,6 +21,8 @@ import {
   markWebpackStatusAsDone,
 } from "../utils/webpack-status"
 import { emitter } from "../redux"
+import http from "http"
+import { startGraphQLServer } from "../utils/start-graphql-server"
 
 export async function startWebpackServer({
   program,
@@ -35,6 +37,29 @@ export async function startWebpackServer({
   if (!program || !app || !store) {
     report.panic(`Missing required params`)
   }
+
+  await startGraphQLServer({ app })
+
+  /**
+   * Set up the HTTP server and socket.io.
+   **/
+  const server = new http.Server(app)
+
+  // hardcoded `localhost`, because host should match `target` we set
+  // in http proxy in `develop-proxy`
+  server.listen(program.port, `localhost`)
+
+  const urls = prepareUrls(
+    program.https ? `https` : `http`,
+    program.host,
+    program.proxyPort
+  )
+
+  printInstructions(program.sitePackageJson.name || `(Unnamed package)`, urls)
+
+  return
+
+
   let {
     compiler,
     webpackActivity,
