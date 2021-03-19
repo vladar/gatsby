@@ -17,8 +17,10 @@ import {
 import { PlaceholderProps } from "./placeholder"
 import { MainImageProps } from "./main-image"
 import { Layout } from "../image-utils"
+import { getSizer } from "./layout-wrapper"
+import { propTypes } from "./gatsby-image.server"
 
-// eslint-disable-next-line @typescript-eslint/interface-name-prefix
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export interface GatsbyImageProps
   extends Omit<
     ImgHTMLAttributes<HTMLImageElement>,
@@ -27,6 +29,7 @@ export interface GatsbyImageProps
   alt: string
   as?: ElementType
   className?: string
+  class?: string
   imgClassName?: string
   image: IGatsbyImageData
   imgStyle?: CSSProperties
@@ -35,19 +38,16 @@ export interface GatsbyImageProps
   objectPosition?: CSSProperties["objectPosition"]
   onLoad?: () => void
   onError?: () => void
-  onStartLoad?: Function
+  onStartLoad?: (props: { wasCached?: boolean }) => void
 }
 
 export interface IGatsbyImageData {
   layout: Layout
-  height?: number
+  width: number
+  height: number
   backgroundColor?: string
-  sizes?: string
   images: Pick<MainImageProps, "sources" | "fallback">
   placeholder?: Pick<PlaceholderProps, "sources" | "fallback">
-  width?: number
-  maxHeight?: number
-  maxWidth?: number
 }
 
 let hasShownWarning = false
@@ -56,10 +56,12 @@ export const GatsbyImageHydrator: FunctionComponent<GatsbyImageProps> = function
   as: Type = `div`,
   style,
   className,
+  class: preactClass,
   onStartLoad,
   image,
   onLoad: customOnLoad,
   backgroundColor,
+  loading = `lazy`,
   ...props
 }) {
   if (!image) {
@@ -67,6 +69,9 @@ export const GatsbyImageHydrator: FunctionComponent<GatsbyImageProps> = function
       console.warn(`[gatsby-plugin-image] Missing image prop`)
     }
     return null
+  }
+  if (preactClass) {
+    className = preactClass
   }
   const { width, height, layout, images } = image
 
@@ -106,13 +111,14 @@ export const GatsbyImageHydrator: FunctionComponent<GatsbyImageProps> = function
         if (hasSSRHtml.complete) {
           customOnLoad?.()
           storeImageloaded(JSON.stringify(images))
-        }
-        hasSSRHtml.addEventListener(`load`, function onLoad() {
-          hasSSRHtml.removeEventListener(`load`, onLoad)
+        } else {
+          hasSSRHtml.addEventListener(`load`, function onLoad() {
+            hasSSRHtml.removeEventListener(`load`, onLoad)
 
-          customOnLoad?.()
-          storeImageloaded(JSON.stringify(images))
-        })
+            customOnLoad?.()
+            storeImageloaded(JSON.stringify(images))
+          })
+        }
         return undefined
       }
 
@@ -154,11 +160,6 @@ export const GatsbyImageHydrator: FunctionComponent<GatsbyImageProps> = function
         return
       }
 
-      // When no ssrHtml is found (develop) we should force render instead of hydrate
-      if (!hasSSRHtml) {
-        hydrated.current = true
-      }
-
       import(`./lazy-hydrate`).then(({ lazyHydrate }) => {
         lazyHydrator.current = lazyHydrate(
           {
@@ -170,6 +171,7 @@ export const GatsbyImageHydrator: FunctionComponent<GatsbyImageProps> = function
               toggleIsLoaded(true)
             },
             ref,
+            loading,
             ...props,
           },
           root,
@@ -189,6 +191,8 @@ export const GatsbyImageHydrator: FunctionComponent<GatsbyImageProps> = function
     props,
   ])
 
+  const sizer = getSizer(layout, width, height)
+
   return (
     <Type
       {...wrapperProps}
@@ -199,7 +203,9 @@ export const GatsbyImageHydrator: FunctionComponent<GatsbyImageProps> = function
       }}
       className={`${wClass}${className ? ` ${className}` : ``}`}
       ref={root}
-      dangerouslySetInnerHTML={{ __html: `` }}
+      dangerouslySetInnerHTML={{
+        __html: sizer,
+      }}
       suppressHydrationWarning
     />
   )
@@ -210,4 +216,7 @@ export const GatsbyImage: FunctionComponent<GatsbyImageProps> = function GatsbyI
 ) {
   return <GatsbyImageHydrator {...props} />
 }
+
+GatsbyImage.propTypes = propTypes
+
 GatsbyImage.displayName = `GatsbyImage`

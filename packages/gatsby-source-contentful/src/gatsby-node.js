@@ -4,7 +4,7 @@ const _ = require(`lodash`)
 const fs = require(`fs-extra`)
 const { createClient } = require(`contentful`)
 const v8 = require(`v8`)
-const fetch = require(`node-fetch`)
+const fetch = require(`@vercel/fetch-retry`)(require(`node-fetch`))
 const { CODES } = require(`./report`)
 
 const normalize = require(`./normalize`)
@@ -29,22 +29,28 @@ exports.setFieldsOnGraphQLNodeType = require(`./extend-node-type`).extendNodeTyp
 const validateContentfulAccess = async pluginOptions => {
   if (process.env.NODE_ENV === `test`) return undefined
 
-  await fetch(`https://${pluginOptions.host}/spaces/${pluginOptions.spaceId}`, {
-    headers: {
-      Authorization: `Bearer ${pluginOptions.accessToken}`,
-      "Content-Type": `application/json`,
-    },
-  })
+  await fetch(
+    `https://${pluginOptions.host}/spaces/${pluginOptions.spaceId}/environments/${pluginOptions.environment}/content_types`,
+    {
+      headers: {
+        Authorization: `Bearer ${pluginOptions.accessToken}`,
+        "Content-Type": `application/json`,
+      },
+    }
+  )
     .then(res => res.ok)
     .then(ok => {
-      if (!ok)
-        throw new Error(
-          `Cannot access Contentful space "${maskText(
-            pluginOptions.spaceId
-          )}" with access token "${maskText(
-            pluginOptions.accessToken
-          )}". Make sure to double check them!`
-        )
+      if (!ok) {
+        const errorMessage = `Cannot access Contentful space "${maskText(
+          pluginOptions.spaceId
+        )}" on environment "${
+          pluginOptions.environment
+        } with access token "${maskText(
+          pluginOptions.accessToken
+        )}". Make sure to double check them!`
+
+        throw new Error(errorMessage)
+      }
     })
 
   return undefined
@@ -164,7 +170,11 @@ exports.sourceNodes = async (
 ) => {
   const { createNode, deleteNode, touchNode, createTypes } = actions
 
-  let currentSyncData, contentTypeItems, defaultLocale, locales, space
+  let currentSyncData
+  let contentTypeItems
+  let defaultLocale
+  let locales
+  let space
   if (process.env.GATSBY_CONTENTFUL_EXPERIMENTAL_FORCE_CACHE) {
     reporter.info(
       `GATSBY_CONTENTFUL_EXPERIMENTAL_FORCE_CACHE: Storing/loading remote data through \`` +
@@ -194,12 +204,12 @@ exports.sourceNodes = async (
    * with all data from subsequent syncs. Afterwards the references get
    * resolved via the Contentful JS SDK.
    */
-  let syncToken = await cache.get(CACHE_SYNC_TOKEN)
+  const syncToken = await cache.get(CACHE_SYNC_TOKEN)
   let previousSyncData = {
     assets: [],
     entries: [],
   }
-  let cachedData = await cache.get(CACHE_SYNC_DATA)
+  const cachedData = await cache.get(CACHE_SYNC_DATA)
 
   if (cachedData) {
     previousSyncData = cachedData
@@ -241,10 +251,10 @@ exports.sourceNodes = async (
         if (node.internal.owner !== `gatsby-source-contentful`) {
           return
         }
-        touchNode({ nodeId: node.id })
+        touchNode(node)
         if (node.localFile___NODE) {
           // Prevent GraphQL type inference from crashing on this property
-          touchNode({ nodeId: node.localFile___NODE })
+          touchNode(getNode(node.localFile___NODE))
         }
       })
 
@@ -319,7 +329,7 @@ exports.sourceNodes = async (
   }
 
   createTypes(`
-  interface ContentfulEntry @nodeInterface {
+  interface ContentfulEntry implements Node {
     contentful_id: String!
     id: ID!
     node_locale: String!
@@ -346,7 +356,15 @@ exports.sourceNodes = async (
 
   const gqlTypes = contentTypeItems.map(contentTypeItem =>
     schema.buildObjectType({
-      name: _.upperFirst(_.camelCase(`Contentful ${contentTypeItem.name}`)),
+      name: _.upperFirst(
+        _.camelCase(
+          `Contentful ${
+            pluginConfig.get(`useNameForId`)
+              ? contentTypeItem.name
+              : contentTypeItem.sys.id
+          }`
+        )
+      ),
       fields: {
         contentful_id: { type: `String!` },
         id: { type: `ID!` },
@@ -470,8 +488,8 @@ exports.sourceNodes = async (
 
     localizedNodes.forEach(node => {
       // touchNode first, to populate typeOwners & avoid erroring
-      touchNode({ nodeId: node.id })
-      deleteNode({ node })
+      touchNode(node)
+      deleteNode(node)
     })
   }
 
@@ -481,7 +499,7 @@ exports.sourceNodes = async (
   const existingNodes = getNodes().filter(
     n => n.internal.owner === `gatsby-source-contentful`
   )
-  existingNodes.forEach(n => touchNode({ nodeId: n.id }))
+  existingNodes.forEach(n => touchNode(n))
 
   const assets = mergedSyncData.assets
 
@@ -629,6 +647,7 @@ exports.sourceNodes = async (
       store,
       cache,
       getCache,
+      getNode,
       getNodesByType,
       reporter,
       assetDownloadWorkers: pluginConfig.get(`assetDownloadWorkers`),

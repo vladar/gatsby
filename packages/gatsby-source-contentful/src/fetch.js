@@ -19,6 +19,7 @@ module.exports = async function contentfulFetch({
     host: pluginConfig.get(`host`),
     environment: pluginConfig.get(`environment`),
     proxy: pluginConfig.get(`proxy`),
+    integration: `gatsby-source-contentful`,
     responseLogger: response => {
       function createMetadataLog(response) {
         if (process.env.gatsby_log_level === `verbose`) {
@@ -34,13 +35,6 @@ module.exports = async function contentfulFetch({
         ]
           .filter(Boolean)
           .join(` `)
-      }
-
-      // Sync progress
-      if (response.config.url === `sync`) {
-        syncItemCount += response.data.items.length
-        syncProgress.total = syncItemCount
-        syncProgress.tick(response.data.items.length)
       }
 
       // Log error and throw it in an extended shape
@@ -64,6 +58,13 @@ module.exports = async function contentfulFetch({
         contentfulApiError.config = response.config
 
         throw contentfulApiError
+      }
+
+      // Sync progress
+      if (response.config.url === `sync`) {
+        syncItemCount += response.data.items.length
+        syncProgress.total = syncItemCount
+        syncProgress.tick(response.data.items.length)
       }
 
       reporter.verbose(
@@ -152,7 +153,7 @@ ${formatPluginOptionsForCLI(pluginConfig.getOriginalPluginOptions(), errors)}`,
     )
     syncProgress.start()
     reporter.verbose(`Contentful: Sync ${pageLimit} items per page.`)
-    let query = syncToken
+    const query = syncToken
       ? { nextSyncToken: syncToken, ...basicSyncConfig }
       : { initial: true, ...basicSyncConfig }
     currentSyncData = await client.sync(query)
@@ -188,7 +189,7 @@ ${formatPluginOptionsForCLI(pluginConfig.getOriginalPluginOptions(), errors)}`,
   }
   reporter.verbose(`Content types fetched ${contentTypes.items.length}`)
 
-  let contentTypeItems = contentTypes.items
+  const contentTypeItems = contentTypes.items
 
   const result = {
     currentSyncData,
