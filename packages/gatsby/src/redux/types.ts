@@ -197,8 +197,8 @@ export type GatsbyNodeAPI =
 
 export interface IGatsbyState {
   program: IStateProgram
-  nodes: GatsbyNodes
-  nodesByType: Map<string, GatsbyNodes>
+  // nodes: GatsbyNodes
+  // nodesByType: Map<string, GatsbyNodes>
   resolvedNodesCache: Map<string, any> // TODO
   nodesTouched: Set<string>
   lastAction: ActionsUnion

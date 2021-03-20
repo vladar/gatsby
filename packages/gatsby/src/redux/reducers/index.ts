@@ -34,8 +34,8 @@ import { htmlReducer } from "./html"
 export {
   definitionsReducer as definitions,
   programReducer as program,
-  nodesReducer as nodes,
-  nodesByTypeReducer as nodesByType,
+  // nodesReducer as nodes,
+  // nodesByTypeReducer as nodesByType,
   resolvedNodesCacheReducer as resolvedNodesCache,
   nodesTouchedReducer as nodesTouched,
   lastActionReducer as lastAction,

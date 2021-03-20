@@ -12,6 +12,7 @@ import thunk, { ThunkMiddleware } from "redux-thunk"
 import * as reducers from "./reducers"
 import { writeToCache, readFromCache } from "./persist"
 import { IGatsbyState, ActionsUnion } from "./types"
+import { updateNodesDb } from "../db/nodes-db"
 
 // Create event emitter for actions
 export const emitter = mett()
@@ -86,6 +87,7 @@ export const store: GatsbyReduxStore = configureStore(readState())
 
 // Persist state.
 export const saveState = (): void => {
+  return undefined
   if (process.env.GATSBY_DISABLE_CACHE_PERSISTENCE) {
     // do not persist cache if above env var is set.
     // this is to temporarily unblock builds that hit the v8.serialize related
@@ -113,4 +115,5 @@ export const saveState = (): void => {
 store.subscribe(() => {
   const lastAction = store.getState().lastAction
   emitter.emit(lastAction.type, lastAction)
+  updateNodesDb(lastAction)
 })
