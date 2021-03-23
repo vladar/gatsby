@@ -10,6 +10,13 @@ import {
 import { removePageData, fixedPagePath } from "../utils/page-data"
 import { store } from "../redux"
 import { IGatsbyState } from "../redux/types"
+const { murmurhash } = require(`babel-plugin-remove-graphql-queries`)
+
+const totalReplicas = Number(process.env.GATSBY_REPLICA_COUNT) || 1
+const replicaId = Number(process.env.GATSBY_REPLICA) || 0
+
+const isPageForThisReplica = (path: string): boolean =>
+  replicaId > 0 && (murmurhash(path) % totalReplicas) + 1 === replicaId
 
 const checkFolderIsEmpty = (path: string): boolean =>
   fs.existsSync(path) && !fs.readdirSync(path).length
@@ -148,6 +155,9 @@ export function calcDirtyHtmlFiles(
   }
 
   state.html.trackedHtmlFiles.forEach(function (htmlFile, path) {
+    if (!isPageForThisReplica(path)) {
+      return
+    }
     if (htmlFile.isDeleted || !state.pages.has(path)) {
       // FIXME: checking pages state here because pages are not persisted
       // and because of that `isDeleted` might not be set ...

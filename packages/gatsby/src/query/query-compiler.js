@@ -64,13 +64,14 @@ export default async function compile({ parentSpan } = {}): Promise<
 
   const parsedQueries = await parseQueries({
     base: program.directory,
-    additional: resolveThemes(
-      flattenedPlugins.map(plugin => {
-        return {
-          themeDir: plugin.pluginFilepath,
-        }
-      })
-    ),
+    additional: [],
+    // additional: resolveThemes(
+    //   flattenedPlugins.map(plugin => {
+    //     return {
+    //       themeDir: plugin.pluginFilepath,
+    //     }
+    //   })
+    // ),
     addError,
     parentSpan,
   })

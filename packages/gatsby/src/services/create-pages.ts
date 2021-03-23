@@ -15,8 +15,6 @@ export async function createPages({
   deletedPages: Array<string>
   changedPages: Array<string>
 }> {
-  return { changedPages: [], deletedPages: [] }
-
   assertStore(store)
   const activity = reporter.activityTimer(`createPages`, {
     parentSpan,

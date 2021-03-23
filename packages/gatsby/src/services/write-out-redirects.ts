@@ -8,7 +8,6 @@ import { IQueryRunningContext } from "../state-machines/query-running/types"
 export async function writeOutRedirects({
   parentSpan,
 }: Partial<IQueryRunningContext>): Promise<void> {
-  return
   // Write out redirects.
   const activity = reporter.activityTimer(`write out redirect data`, {
     parentSpan,

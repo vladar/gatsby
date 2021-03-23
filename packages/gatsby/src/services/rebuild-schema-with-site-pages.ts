@@ -5,7 +5,6 @@ import { IQueryRunningContext } from "../state-machines/query-running/types"
 export async function rebuildSchemaWithSitePage({
   parentSpan,
 }: Partial<IQueryRunningContext>): Promise<void> {
-  return
   const activity = reporter.activityTimer(`update schema`, {
     parentSpan,
   })

@@ -270,10 +270,11 @@ ${reservedFields.map(f => `  * "${f}"`).join(`\n`)}
     }
   }
 
-  const pageComponentPath = shadowCreatePagePath(page.component)
-  if (pageComponentPath) {
-    page.component = pageComponentPath
-  }
+  // FIXME: this fails in replicas because this requires both sourceNodes and onCreateWebpackConfig
+  // const pageComponentPath = shadowCreatePagePath(page.component)
+  // if (pageComponentPath) {
+  //   page.component = pageComponentPath
+  // }
 
   const { error, message, panicOnBuild } = validatePageComponent(
     page,

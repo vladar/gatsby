@@ -7,7 +7,6 @@ export async function writeOutRequires({
   store,
   parentSpan,
 }: Partial<IQueryRunningContext>): Promise<void> {
-  return
   assertStore(store)
 
   // Write out files.

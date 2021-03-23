@@ -17,7 +17,6 @@ export async function runPageQueries({
   program,
   graphqlRunner,
 }: Partial<IQueryRunningContext>): Promise<void> {
-  return
   assertStore(store)
 
   if (!queryIds) {

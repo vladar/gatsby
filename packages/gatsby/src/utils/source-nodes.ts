@@ -7,6 +7,7 @@ import { actions } from "../redux/actions"
 import { IGatsbyState } from "../redux/types"
 const { deleteNode } = actions
 import { Node } from "../../index"
+import { syncNodes, waitDbCommit } from "../db/nodes-db"
 
 /**
  * Finds the name of all plugins which implement Gatsby APIs that
@@ -104,6 +105,11 @@ export default async ({
     webhookBody: webhookBody || {},
     pluginName,
   })
+  if (!process.env.GATSBY_REPLICA) {
+    await waitDbCommit()
+  } else {
+    await syncNodes()
+  }
 
   const state = store.getState()
   const nodes = getNodes()
@@ -111,4 +117,7 @@ export default async ({
   warnForPluginsWithoutNodes(state, nodes)
 
   deleteStaleNodes(state, nodes)
+
+  await waitDbCommit()
+  store.dispatch({ type: `SET_PROGRAM_STATUS`, payload: `SOURCING_FINISHED` })
 }

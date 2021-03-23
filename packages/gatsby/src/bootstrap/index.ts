@@ -52,6 +52,9 @@ export async function bootstrap(
     reporter
   )
 
+  // TODO: pages must be created in the "main process"
+  //   and synced to replicas similar to nodes
+  //   (so do not re-create pages in replicas)
   await createPages(context)
 
   await createPagesStatefully(context)
@@ -60,7 +63,9 @@ export async function bootstrap(
 
   await rebuildSchemaWithSitePage(context)
 
-  await extractQueries(context)
+  if (process.env.GATSBY_REPLICA) {
+    await extractQueries(context)
+  }
 
   await writeOutRedirects(context)
 

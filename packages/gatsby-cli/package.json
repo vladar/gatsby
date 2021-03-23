@@ -92,7 +92,7 @@
     "build:rollup": "rollup -c",
     "build": "npm-run-all -p build:babel build:rollup",
     "prepare": "cross-env NODE_ENV=production npm run build && npm run typegen",
-    "typegen": "rimraf \"lib/**/*.d.ts\" && tsc --emitDeclarationOnly --declaration --declarationDir lib/",
+    "typegen": "",
     "watch:babel": "npm run build:babel -- --watch",
     "watch:rollup": "npm run build:rollup -- -w",
     "watch": "npm-run-all -p watch:babel watch:rollup",

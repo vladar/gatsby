@@ -3,6 +3,14 @@ const { store } = require(`../redux`)
 const { hasFlag, FLAG_ERROR_EXTRACTION } = require(`../redux/reducers/queries`)
 const queryQueue = require(`./queue`)
 
+const { murmurhash } = require(`babel-plugin-remove-graphql-queries`)
+
+const totalReplicas = Number(process.env.GATSBY_REPLICA_COUNT) || 1
+const replicaId = Number(process.env.GATSBY_REPLICA) || 0
+
+const isQueryForThisReplica = queryId =>
+  replicaId > 0 && (murmurhash(queryId) % totalReplicas) + 1 === replicaId
+
 /**
  * Calculates the set of dirty query IDs (page.paths, or staticQuery.id's).
  *
@@ -24,6 +32,9 @@ const calcDirtyQueryIds = state => {
   const dirtyQueryIds = []
   for (const [queryId, query] of trackedQueries) {
     if (deletedQueries.has(queryId)) {
+      continue
+    }
+    if (!isQueryForThisReplica(queryId)) {
       continue
     }
     if (query.dirty > 0 && !queriesWithBabelErrors.has(queryId)) {

@@ -14,7 +14,9 @@ export const copyStaticDirs = (): void => {
   // if there are legacy themes, only use them. Otherwise proceed with plugins
   const themesSet = flattenedPlugins.map(plugin => {
     return {
-      themeDir: plugin.pluginFilepath,
+      // FIXME: plugin.pluginFilepath is set in internal-data-bridge
+      //  via mutation of the "plugin" node after it was created, so not persisted in our store
+      themeDir: plugin.resolve,
       themeName: plugin.name,
     }
   })

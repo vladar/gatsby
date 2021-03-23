@@ -252,6 +252,9 @@ const pluginNodeCache = new Map()
 
 const availableActionsCache = new Map()
 let publicPath
+
+const isReplica = Boolean(process.env.GATSBY_REPLICA)
+
 const runAPI = async (plugin, api, args, activity) => {
   let gatsbyNode = pluginNodeCache.get(plugin.name)
   if (!gatsbyNode) {
@@ -407,6 +410,10 @@ const runAPI = async (plugin, api, args, activity) => {
       },
       plugin.pluginOptions,
     ]
+
+    if (api === `sourceNodes` && `pl` && isReplica) {
+      return null
+    }
 
     // If the plugin is using a callback use that otherwise
     // expect a Promise to be returned.

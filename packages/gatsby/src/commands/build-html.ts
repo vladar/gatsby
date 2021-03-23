@@ -332,7 +332,7 @@ export async function buildHTMLPagesAndDeleteStaleArtifacts({
 
   if (toRegenerate.length > 0) {
     const buildHTMLActivityProgress = reporter.createProgress(
-      `Building static HTML for pages`,
+      `Building static HTML for pages ${toRegenerate.length}`,
       toRegenerate.length,
       0,
       {
@@ -376,7 +376,7 @@ export async function buildHTMLPagesAndDeleteStaleArtifacts({
 
   if (!program.keepPageRenderer) {
     try {
-      await deleteRenderer(pageRenderer)
+      // await deleteRenderer(pageRenderer)
     } catch (err) {
       // pass through
     }

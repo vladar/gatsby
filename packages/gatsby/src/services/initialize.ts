@@ -281,7 +281,8 @@ export async function initialize({
   if (
     process.env.NODE_ENV === `production` &&
     publicDirExists &&
-    !cacheJsonDirExists
+    !cacheJsonDirExists &&
+    !process.env.GATSBY_REPLICA
   ) {
     activity = reporter.activityTimer(
       `delete html and css files from previous builds`,
@@ -348,7 +349,10 @@ export async function initialize({
     `)
   }
 
-  if (!oldPluginsHash || pluginsHash !== oldPluginsHash || cacheIsCorrupt) {
+  if (
+    (!oldPluginsHash || pluginsHash !== oldPluginsHash || cacheIsCorrupt) &&
+    !process.env.GATSBY_REPLICA
+  ) {
     try {
       // Comment out inviet until we can test perf impact
       //
@@ -464,117 +468,120 @@ export async function initialize({
 
   activity.end()
 
-  activity = reporter.activityTimer(`copy gatsby files`, {
-    parentSpan,
-  })
-  activity.start()
-  const srcDir = `${__dirname}/../../cache-dir`
-  const siteDir = cacheDirectory
-  const tryRequire = `${__dirname}/../utils/test-require-error.js`
-  try {
-    await fs.copy(srcDir, siteDir)
-    await fs.copy(tryRequire, `${siteDir}/test-require-error.js`)
-    await fs.ensureDirSync(`${cacheDirectory}/json`)
-
-    // Ensure .cache/fragments exists and is empty. We want fragments to be
-    // added on every run in response to data as fragments can only be added if
-    // the data used to create the schema they're dependent on is available.
-    await fs.emptyDir(`${cacheDirectory}/fragments`)
-  } catch (err) {
-    reporter.panic(`Unable to copy site files to .cache`, err)
-  }
-
-  // Find plugins which implement gatsby-browser and gatsby-ssr and write
-  // out api-runners for them.
-  const hasAPIFile = (env, plugin): string | undefined => {
-    // The plugin loader has disabled SSR APIs for this plugin. Usually due to
-    // multiple implementations of an API that can only be implemented once
-    if (env === `ssr` && plugin.skipSSR === true) return undefined
-
-    const envAPIs = plugin[`${env}APIs`]
-
-    // Always include gatsby-browser.js files if they exist as they're
-    // a handy place to include global styles and other global imports.
+  if (!process.env.GATSBY_REPLICA) {
+    activity = reporter.activityTimer(`copy gatsby files`, {
+      parentSpan,
+    })
+    activity.start()
+    const srcDir = `${__dirname}/../../cache-dir`
+    const siteDir = cacheDirectory
+    const tryRequire = `${__dirname}/../utils/test-require-error.js`
     try {
-      if (env === `browser`) {
-        return slash(
-          require.resolve(path.join(plugin.resolve, `gatsby-${env}`))
-        )
-      }
-    } catch (e) {
-      // ignore
+      await fs.copy(srcDir, siteDir)
+      await fs.copy(tryRequire, `${siteDir}/test-require-error.js`)
+      await fs.ensureDirSync(`${cacheDirectory}/json`)
+
+      // Ensure .cache/fragments exists and is empty. We want fragments to be
+      // added on every run in response to data as fragments can only be added if
+      // the data used to create the schema they're dependent on is available.
+      await fs.emptyDir(`${cacheDirectory}/fragments`)
+    } catch (err) {
+      reporter.panic(`Unable to copy site files to .cache`, err)
     }
 
-    if (envAPIs && Array.isArray(envAPIs) && envAPIs.length > 0) {
-      return slash(path.join(plugin.resolve, `gatsby-${env}`))
+    // Find plugins which implement gatsby-browser and gatsby-ssr and write
+    // out api-runners for them.
+    const hasAPIFile = (env, plugin): string | undefined => {
+      // The plugin loader has disabled SSR APIs for this plugin. Usually due to
+      // multiple implementations of an API that can only be implemented once
+      if (env === `ssr` && plugin.skipSSR === true) return undefined
+
+      const envAPIs = plugin[`${env}APIs`]
+
+      // Always include gatsby-browser.js files if they exist as they're
+      // a handy place to include global styles and other global imports.
+      try {
+        if (env === `browser`) {
+          return slash(
+            require.resolve(path.join(plugin.resolve, `gatsby-${env}`))
+          )
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      if (envAPIs && Array.isArray(envAPIs) && envAPIs.length > 0) {
+        return slash(path.join(plugin.resolve, `gatsby-${env}`))
+      }
+      return undefined
     }
-    return undefined
-  }
 
-  const isResolved = (plugin): plugin is IPluginResolution => !!plugin.resolve
-  const isResolvedSSR = (plugin): plugin is IPluginResolutionSSR =>
-    !!plugin.resolve
+    const isResolved = (plugin): plugin is IPluginResolution => !!plugin.resolve
+    const isResolvedSSR = (plugin): plugin is IPluginResolutionSSR =>
+      !!plugin.resolve
 
-  const ssrPlugins: Array<IPluginResolutionSSR> = flattenedPlugins
-    .map(plugin => {
-      return {
-        name: plugin.name,
-        resolve: hasAPIFile(`ssr`, plugin),
-        options: plugin.pluginOptions,
-      }
-    })
-    .filter(isResolvedSSR)
+    const ssrPlugins: Array<IPluginResolutionSSR> = flattenedPlugins
+      .map(plugin => {
+        return {
+          name: plugin.name,
+          resolve: hasAPIFile(`ssr`, plugin),
+          options: plugin.pluginOptions,
+        }
+      })
+      .filter(isResolvedSSR)
 
-  const browserPlugins: Array<IPluginResolution> = flattenedPlugins
-    .map(plugin => {
-      return {
-        resolve: hasAPIFile(`browser`, plugin),
-        options: plugin.pluginOptions,
-      }
-    })
-    .filter(isResolved)
+    const browserPlugins: Array<IPluginResolution> = flattenedPlugins
+      .map(plugin => {
+        return {
+          resolve: hasAPIFile(`browser`, plugin),
+          options: plugin.pluginOptions,
+        }
+      })
+      .filter(isResolved)
 
-  const browserPluginsRequires = browserPlugins
-    .map(plugin => {
-      // we need a relative import path to keep contenthash the same if directory changes
-      const relativePluginPath = path.relative(siteDir, plugin.resolve)
-      return `{
+    const browserPluginsRequires = browserPlugins
+      .map(plugin => {
+        // we need a relative import path to keep contenthash the same if directory changes
+        const relativePluginPath = path.relative(siteDir, plugin.resolve)
+        return `{
       plugin: require('${slash(relativePluginPath)}'),
       options: ${JSON.stringify(plugin.options)},
     }`
-    })
-    .join(`,`)
+      })
+      .join(`,`)
 
-  const browserAPIRunner = `module.exports = [${browserPluginsRequires}]\n`
+    const browserAPIRunner = `module.exports = [${browserPluginsRequires}]\n`
 
-  let sSRAPIRunner = ``
+    let sSRAPIRunner = ``
 
-  try {
-    sSRAPIRunner = fs.readFileSync(`${siteDir}/api-runner-ssr.js`, `utf-8`)
-  } catch (err) {
-    reporter.panic(`Failed to read ${siteDir}/api-runner-ssr.js`, err)
-  }
+    try {
+      sSRAPIRunner = fs.readFileSync(`${siteDir}/api-runner-ssr.js`, `utf-8`)
+    } catch (err) {
+      reporter.panic(`Failed to read ${siteDir}/api-runner-ssr.js`, err)
+    }
 
-  const ssrPluginsRequires = ssrPlugins
-    .map(
-      plugin =>
-        `{
+    const ssrPluginsRequires = ssrPlugins
+      .map(
+        plugin =>
+          `{
       name: '${plugin.name}',
       plugin: require('${plugin.resolve}'),
       options: ${JSON.stringify(plugin.options)},
     }`
+      )
+      .join(`,`)
+    sSRAPIRunner = `var plugins = [${ssrPluginsRequires}]\n${sSRAPIRunner}`
+
+    fs.writeFileSync(
+      `${siteDir}/api-runner-browser-plugins.js`,
+      browserAPIRunner,
+      `utf-8`
     )
-    .join(`,`)
-  sSRAPIRunner = `var plugins = [${ssrPluginsRequires}]\n${sSRAPIRunner}`
+    fs.writeFileSync(`${siteDir}/api-runner-ssr.js`, sSRAPIRunner, `utf-8`)
 
-  fs.writeFileSync(
-    `${siteDir}/api-runner-browser-plugins.js`,
-    browserAPIRunner,
-    `utf-8`
-  )
-  fs.writeFileSync(`${siteDir}/api-runner-ssr.js`, sSRAPIRunner, `utf-8`)
+    activity.end()
+  }
 
-  activity.end()
   /**
    * Start the main bootstrap processes.
    */

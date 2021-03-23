@@ -43,6 +43,7 @@ import {
   markWebpackStatusAsDone,
 } from "../utils/webpack-status"
 import { updateSiteMetadata, isTruthy } from "gatsby-core-utils"
+import { webpackCompiled } from "../db/nodes-db"
 
 module.exports = async function build(program: IBuildArgs): Promise<void> {
   if (isTruthy(process.env.VERBOSE)) {
@@ -83,99 +84,113 @@ module.exports = async function build(program: IBuildArgs): Promise<void> {
     parentSpan: buildSpan,
   })
 
-  const graphqlRunner = new GraphQLRunner(store, {
-    collectStats: true,
-    graphqlTracing: program.graphqlTracing,
-  })
+  let graphqlRunner
+  if (process.env.GATSBY_REPLICA) {
+    graphqlRunner = new GraphQLRunner(store, {
+      collectStats: true,
+      graphqlTracing: program.graphqlTracing,
+    })
 
-  const { queryIds } = await calculateDirtyQueries({ store })
+    const { queryIds } = await calculateDirtyQueries({ store })
 
-  await runStaticQueries({
-    queryIds,
-    parentSpan: buildSpan,
-    store,
-    graphqlRunner,
-  })
+    await runStaticQueries({
+      queryIds,
+      parentSpan: buildSpan,
+      store,
+      graphqlRunner,
+    })
 
-  await runPageQueries({
-    queryIds,
-    graphqlRunner,
-    parentSpan: buildSpan,
-    store,
-  })
+    await runPageQueries({
+      queryIds,
+      graphqlRunner,
+      parentSpan: buildSpan,
+      store,
+    })
+  }
 
-  await writeOutRequires({
-    store,
-    parentSpan: buildSpan,
-  })
-
-  await apiRunnerNode(`onPreBuild`, {
-    graphql: gatsbyNodeGraphQLFunction,
-    parentSpan: buildSpan,
-  })
-
-  // Copy files from the static directory to
-  // an equivalent static directory within public.
-  copyStaticDirs()
-
-  const buildActivityTimer = report.activityTimer(
-    `Building production JavaScript and CSS bundles`,
-    { parentSpan: buildSpan }
-  )
-  buildActivityTimer.start()
   let stats
-  try {
-    stats = await buildProductionBundle(program, buildActivityTimer.span)
-
-    if (stats.hasWarnings()) {
-      const rawMessages = stats.toJson({ moduleTrace: false })
-      reportWebpackWarnings(rawMessages.warnings, report)
-    }
-  } catch (err) {
-    buildActivityTimer.panic(structureWebpackErrors(Stage.BuildJavascript, err))
-  } finally {
-    buildActivityTimer.end()
-  }
-
-  const webpackCompilationHash = stats.hash
-  if (
-    webpackCompilationHash !== store.getState().webpackCompilationHash ||
-    !appDataUtil.exists(publicDir)
-  ) {
-    store.dispatch({
-      type: `SET_WEBPACK_COMPILATION_HASH`,
-      payload: webpackCompilationHash,
+  if (!process.env.GATSBY_REPLICA) {
+    await writeOutRequires({
+      store,
+      parentSpan: buildSpan,
     })
 
-    const rewriteActivityTimer = report.activityTimer(
-      `Rewriting compilation hashes`,
-      {
-        parentSpan: buildSpan,
-      }
+    // FIXME: why do we run queries before onPreBuild?
+    await apiRunnerNode(`onPreBuild`, {
+      graphql: gatsbyNodeGraphQLFunction,
+      parentSpan: buildSpan,
+    })
+
+    // Copy files from the static directory to
+    // an equivalent static directory within public.
+    copyStaticDirs()
+
+    const buildActivityTimer = report.activityTimer(
+      `Building production JavaScript and CSS bundles`,
+      { parentSpan: buildSpan }
     )
-    rewriteActivityTimer.start()
+    buildActivityTimer.start()
+    try {
+      stats = await buildProductionBundle(program, buildActivityTimer.span)
 
-    await appDataUtil.write(publicDir, webpackCompilationHash)
+      if (stats.hasWarnings()) {
+        const rawMessages = stats.toJson({ moduleTrace: false })
+      reportWebpackWarnings(rawMessages.warnings, report)
+      }
+    } catch (err) {
+      buildActivityTimer.panic(
+        structureWebpackErrors(Stage.BuildJavascript, err)
+      )
+    } finally {
+      buildActivityTimer.end()
+    }
 
-    rewriteActivityTimer.end()
+    const webpackCompilationHash = stats.hash
+    if (
+      webpackCompilationHash !== store.getState().webpackCompilationHash ||
+      !appDataUtil.exists(publicDir)
+    ) {
+      store.dispatch({
+        type: `SET_WEBPACK_COMPILATION_HASH`,
+        payload: webpackCompilationHash,
+      })
+
+      const rewriteActivityTimer = report.activityTimer(
+        `Rewriting compilation hashes`,
+        {
+          parentSpan: buildSpan,
+        }
+      )
+      rewriteActivityTimer.start()
+
+      await appDataUtil.write(publicDir, webpackCompilationHash)
+
+      rewriteActivityTimer.end()
+    }
   }
 
-  await flushPendingPageDataWrites()
-  markWebpackStatusAsDone()
+  if (process.env.GATSBY_REPLICA) {
+    await flushPendingPageDataWrites()
+  }
 
-  if (telemetry.isTrackingEnabled()) {
-    // transform asset size to kB (from bytes) to fit 64 bit to numbers
-    const bundleSizes = stats
-      .toJson({ assets: true })
-      .assets.filter(asset => asset.name.endsWith(`.js`))
-      .map(asset => asset.size / 1000)
-    const pageDataSizes = [...store.getState().pageDataStats.values()]
+  if (!process.env.GATSBY_REPLICA) {
+    // FIXME: why markWebpackStatusAsDone is here (after pending page data writes)?
+    markWebpackStatusAsDone()
 
-    telemetry.addSiteMeasurement(`BUILD_END`, {
-      bundleStats: telemetry.aggregateStats(bundleSizes),
-      pageDataStats: telemetry.aggregateStats(pageDataSizes),
-      queryStats: graphqlRunner.getStats(),
-    })
+    if (telemetry.isTrackingEnabled()) {
+      // transform asset size to kB (from bytes) to fit 64 bit to numbers
+      const bundleSizes = stats
+        .toJson({ assets: true })
+        .assets.filter(asset => asset.name.endsWith(`.js`))
+        .map(asset => asset.size / 1000)
+      const pageDataSizes = [...store.getState().pageDataStats.values()]
+
+      telemetry.addSiteMeasurement(`BUILD_END`, {
+        bundleStats: telemetry.aggregateStats(bundleSizes),
+        pageDataStats: telemetry.aggregateStats(pageDataSizes),
+        queryStats: graphqlRunner?.getStats(),
+      })
+    }
   }
 
   store.dispatch(actions.setProgramStatus(`BOOTSTRAP_QUERY_RUNNING_FINISHED`))
@@ -187,51 +202,71 @@ module.exports = async function build(program: IBuildArgs): Promise<void> {
   // we need to save it again to make sure our latest state has been saved
   await db.saveState()
 
-  const buildSSRBundleActivityProgress = report.activityTimer(
-    `Building HTML renderer`,
-    { parentSpan: buildSpan }
-  )
-  buildSSRBundleActivityProgress.start()
   let pageRenderer: string
-  try {
-    pageRenderer = await buildRenderer(program, Stage.BuildHTML, buildSpan)
-  } catch (err) {
-    buildActivityTimer.panic(structureWebpackErrors(Stage.BuildHTML, err))
-  } finally {
-    buildSSRBundleActivityProgress.end()
+  if (!process.env.GATSBY_REPLICA) {
+    const buildSSRBundleActivityProgress = report.activityTimer(
+      `Building HTML renderer`,
+      { parentSpan: buildSpan }
+    )
+    buildSSRBundleActivityProgress.start()
+    try {
+      pageRenderer = await buildRenderer(program, Stage.BuildHTML, buildSpan)
+
+      // Notify the store that webpack is ready
+      store.dispatch({
+        type: `SET_PROGRAM_STATUS`,
+        payload: `WEBPACK_FINISHED`,
+      })
+    } catch (err) {
+      buildSSRBundleActivityProgress.panic(
+        structureWebpackErrors(Stage.BuildHTML, err)
+      )
+    } finally {
+      buildSSRBundleActivityProgress.end()
+    }
+  } else {
+    pageRenderer = `${program.directory}/public/render-page.js`
   }
 
-  const {
-    toRegenerate,
-    toDelete,
-  } = await buildHTMLPagesAndDeleteStaleArtifacts({
-    program,
-    pageRenderer,
-    workerPool,
-    buildSpan,
-  })
+  let toRegenerate = []
+  let toDelete = []
+  const workerPool = WorkerPool.create()
+  if (process.env.GATSBY_REPLICA) {
+    await webpackCompiled()
 
-  telemetry.addSiteMeasurement(`BUILD_END`, {
-    pagesCount: toRegenerate.length, // number of html files that will be written
-    totalPagesCount: store.getState().pages.size, // total number of pages
-  })
+    const result = await buildHTMLPagesAndDeleteStaleArtifacts({
+      program,
+      pageRenderer,
+      workerPool,
+      buildSpan,
+    })
+    toRegenerate = result.toRegenerate
+    toDelete = result.toDelete
 
-  const postBuildActivityTimer = report.activityTimer(`onPostBuild`, {
-    parentSpan: buildSpan,
-  })
-  postBuildActivityTimer.start()
-  await apiRunnerNode(`onPostBuild`, {
-    graphql: gatsbyNodeGraphQLFunction,
-    parentSpan: buildSpan,
-  })
-  postBuildActivityTimer.end()
+    telemetry.addSiteMeasurement(`BUILD_END`, {
+      pagesCount: toRegenerate.length, // number of html files that will be written
+      totalPagesCount: store.getState().pages.size, // total number of pages
+    })
+  }
 
-  // Wait for any jobs that were started in onPostBuild
-  // This could occur due to queries being run which invoke sharp for instance
-  await waitUntilAllJobsComplete()
+  if (!process.env.GATSBY_REPLICA) {
+    const postBuildActivityTimer = report.activityTimer(`onPostBuild`, {
+      parentSpan: buildSpan,
+    })
+    postBuildActivityTimer.start()
+    await apiRunnerNode(`onPostBuild`, {
+      graphql: gatsbyNodeGraphQLFunction,
+      parentSpan: buildSpan,
+    })
+    postBuildActivityTimer.end()
 
-  // Make sure we saved the latest state so we have all jobs cached
-  await db.saveState()
+    // Wait for any jobs that were started in onPostBuild
+    // This could occur due to queries being run which invoke sharp for instance
+    await waitUntilAllJobsComplete()
+
+    // Make sure we saved the latest state so we have all jobs cached
+    await db.saveState()
+  }
 
   report.info(`Done building in ${process.uptime()} sec`)
 
