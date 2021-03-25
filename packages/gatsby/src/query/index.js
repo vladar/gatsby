@@ -9,7 +9,7 @@ const totalReplicas = Number(process.env.GATSBY_REPLICA_COUNT) || 1
 const replicaId = Number(process.env.GATSBY_REPLICA) || 0
 
 const isQueryForThisReplica = queryId =>
-  replicaId > 0 && (murmurhash(queryId) % totalReplicas) + 1 === replicaId
+  !replicaId || (murmurhash(queryId) % totalReplicas) + 1 === replicaId
 
 /**
  * Calculates the set of dirty query IDs (page.paths, or staticQuery.id's).

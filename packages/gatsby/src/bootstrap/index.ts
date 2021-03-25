@@ -17,6 +17,7 @@ import reporter from "gatsby-cli/lib/reporter"
 import { globalTracer } from "opentracing"
 import JestWorker from "jest-worker"
 import { handleStalePageData } from "../utils/page-data"
+import db from "../db"
 
 const tracer = globalTracer()
 
@@ -45,6 +46,8 @@ export async function bootstrap(
   await customizeSchema(context)
   await sourceNodes(context)
 
+  await db.saveState()
+
   await buildSchema(context)
 
   context.gatsbyNodeGraphQLFunction = createGraphQLRunner(
@@ -63,9 +66,10 @@ export async function bootstrap(
 
   await rebuildSchemaWithSitePage(context)
 
-  if (process.env.GATSBY_REPLICA) {
-    await extractQueries(context)
-  }
+  // FIXME: need to run static queries in the main process :/
+  // if (process.env.GATSBY_REPLICA) {
+  await extractQueries(context)
+  // }
 
   await writeOutRedirects(context)
 

@@ -12,7 +12,7 @@ const {
 /**
  * Create Mdx types and resolvers
  */
-exports.sourceNodes = require(`./gatsby/source-nodes`)
+exports.createSchemaCustomization = require(`./gatsby/source-nodes`)
 
 /**
  * Check whether to create Mdx nodes from MDX files.

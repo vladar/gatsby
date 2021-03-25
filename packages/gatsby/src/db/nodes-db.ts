@@ -6,6 +6,7 @@ import { performance } from "perf_hooks"
 interface IDatabases {
   nodes: Database<IGatsbyNode, string>
   nodesByType: Database<string, string>
+  staticQueriesByTemplate: Database<Array<string>, string>
   metadata: Database<string, string>
 }
 
@@ -44,7 +45,7 @@ function getDatabases(): IDatabases {
     databases = {
       nodes: rootDb.openDB({
         name: `nodes`,
-        cache: process.env.GATSBY_REPLICA ? true : false, // do not keep nodes in memory in main process
+        cache: true,
         // cache: true,
         // @ts-ignore
         readOnly,
@@ -56,6 +57,12 @@ function getDatabases(): IDatabases {
         name: `nodesByType`,
         // @ts-ignore
         dupSort: true,
+        // @ts-ignore
+        readOnly,
+        create: !readOnly,
+      }),
+      staticQueriesByTemplate: rootDb.openDB({
+        name: `staticQueriesByTemplate`,
         // @ts-ignore
         readOnly,
         create: !readOnly,
@@ -174,6 +181,16 @@ export function updateNodesDb(action: ActionsUnion): void {
       metadata.putSync(`storeState`, `STARTED`)
       break
     }
+
+    case `SET_STATIC_QUERIES_BY_TEMPLATE`: {
+      const { staticQueriesByTemplate } = getDatabases()
+      staticQueriesByTemplate.put(
+        action.payload.componentPath,
+        action.payload.staticQueryHashes
+      )
+      break
+    }
+
     case `SET_PROGRAM_STATUS`: {
       // @ts-ignore
       if (action.payload === `SOURCING_FINISHED`) {
@@ -235,6 +252,23 @@ export async function storeIsReady(): Promise<void> {
   return new Promise(checkIfReady)
 }
 
+export async function syncWebpackArtifacts(): Promise<void> {
+  await webpackCompiled()
+
+  const { staticQueriesByTemplate } = getDatabases()
+
+  staticQueriesByTemplate.getRange({}).forEach(({ key, value }) => {
+    const action = {
+      type: `SET_STATIC_QUERIES_BY_TEMPLATE`,
+      payload: {
+        componentPath: key,
+        staticQueryHashes: value,
+      },
+    }
+    store.dispatch(action)
+  })
+}
+
 export async function syncNodes(): Promise<void> {
   await storeIsReady()
 
@@ -247,7 +281,7 @@ export async function syncNodes(): Promise<void> {
   })
 }
 
-export async function webpackCompiled(): Promise<void> {
+async function webpackCompiled(): Promise<void> {
   if (!process.env.GATSBY_REPLICA) {
     throw new Error(`Only allowed for replicas`)
   }

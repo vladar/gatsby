@@ -87,7 +87,9 @@ export const store: GatsbyReduxStore = configureStore(readState())
 
 // Persist state.
 export const saveState = (): void => {
-  return undefined
+  if (process.env.GATSBY_REPLICA) {
+    return undefined
+  }
   if (process.env.GATSBY_DISABLE_CACHE_PERSISTENCE) {
     // do not persist cache if above env var is set.
     // this is to temporarily unblock builds that hit the v8.serialize related
@@ -98,7 +100,6 @@ export const saveState = (): void => {
   const state = store.getState()
 
   return writeToCache({
-    nodes: state.nodes,
     status: state.status,
     components: state.components,
     jobsV2: state.jobsV2,

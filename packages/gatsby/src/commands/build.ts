@@ -43,7 +43,7 @@ import {
   markWebpackStatusAsDone,
 } from "../utils/webpack-status"
 import { updateSiteMetadata, isTruthy } from "gatsby-core-utils"
-import { webpackCompiled } from "../db/nodes-db"
+import { syncWebpackArtifacts } from "../db/nodes-db"
 
 module.exports = async function build(program: IBuildArgs): Promise<void> {
   if (isTruthy(process.env.VERBOSE)) {
@@ -84,22 +84,21 @@ module.exports = async function build(program: IBuildArgs): Promise<void> {
     parentSpan: buildSpan,
   })
 
-  let graphqlRunner
-  if (process.env.GATSBY_REPLICA) {
-    graphqlRunner = new GraphQLRunner(store, {
-      collectStats: true,
-      graphqlTracing: program.graphqlTracing,
-    })
+  const graphqlRunner = new GraphQLRunner(store, {
+    collectStats: true,
+    graphqlTracing: program.graphqlTracing,
+  })
 
-    const { queryIds } = await calculateDirtyQueries({ store })
+  const { queryIds } = await calculateDirtyQueries({ store })
 
+  if (!process.env.GATSBY_REPLICA) {
     await runStaticQueries({
       queryIds,
       parentSpan: buildSpan,
       store,
       graphqlRunner,
     })
-
+  } else {
     await runPageQueries({
       queryIds,
       graphqlRunner,
@@ -169,10 +168,6 @@ module.exports = async function build(program: IBuildArgs): Promise<void> {
     }
   }
 
-  if (process.env.GATSBY_REPLICA) {
-    await flushPendingPageDataWrites()
-  }
-
   if (!process.env.GATSBY_REPLICA) {
     // FIXME: why markWebpackStatusAsDone is here (after pending page data writes)?
     markWebpackStatusAsDone()
@@ -232,7 +227,9 @@ module.exports = async function build(program: IBuildArgs): Promise<void> {
   let toDelete = []
   const workerPool = WorkerPool.create()
   if (process.env.GATSBY_REPLICA) {
-    await webpackCompiled()
+    await syncWebpackArtifacts()
+
+    await flushPendingPageDataWrites()
 
     const result = await buildHTMLPagesAndDeleteStaleArtifacts({
       program,

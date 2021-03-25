@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "fs-extra"
 import { IGatsbyNode, ICachedReduxState } from "./types"
-import { sync as globSync } from "glob"
+// import { sync as globSync } from "glob"
 import report from "gatsby-cli/lib/reporter"
 
 const getReduxCacheFolder = (): string =>
@@ -20,9 +20,9 @@ const getReduxCacheFolder = (): string =>
 function reduxSharedFile(dir: string): string {
   return path.join(dir, `redux.rest.state`)
 }
-function reduxChunkedNodesFilePrefix(dir: string): string {
-  return path.join(dir, `redux.node.state_`)
-}
+// function reduxChunkedNodesFilePrefix(dir: string): string {
+//   return path.join(dir, `redux.node.state_`)
+// }
 
 export function readFromCache(): ICachedReduxState {
   // The cache is stored in two steps; the nodes in chunks and the rest
@@ -38,21 +38,21 @@ export function readFromCache(): ICachedReduxState {
   )
 
   // Note: at 1M pages, this will be 1M/chunkSize chunks (ie. 1m/10k=100)
-  const chunks = globSync(
-    reduxChunkedNodesFilePrefix(reduxCacheFolder) + `*`
-  ).map(file => v8.deserialize(readFileSync(file)))
+  // const chunks = globSync(
+  //   reduxChunkedNodesFilePrefix(reduxCacheFolder) + `*`
+  // ).map(file => v8.deserialize(readFileSync(file)))
 
-  const nodes: Array<[string, IGatsbyNode]> = [].concat(...chunks)
+  // const nodes: Array<[string, IGatsbyNode]> = [].concat(...chunks)
 
-  if (!chunks.length) {
-    report.info(
-      `Cache exists but contains no nodes. There should be at least some nodes available so it seems the cache was corrupted. Disregarding the cache and proceeding as if there was none.`
-    )
-    // TODO: this is a DeepPartial<ICachedReduxState> but requires a big change
-    return {} as ICachedReduxState
-  }
+  // if (!chunks.length) {
+  //   report.info(
+  //     `Cache exists but contains no nodes. There should be at least some nodes available so it seems the cache was corrupted. Disregarding the cache and proceeding as if there was none.`
+  //   )
+  //   // TODO: this is a DeepPartial<ICachedReduxState> but requires a big change
+  //   return {} as ICachedReduxState
+  // }
 
-  obj.nodes = new Map(nodes)
+  // obj.nodes = new Map(nodes)
 
   return obj
 }
@@ -92,26 +92,26 @@ function prepareCacheFolder(
 ): void {
   // Temporarily save the nodes and remove them from the main redux store
   // This prevents an OOM when the page nodes collectively contain to much data
-  const map = contents.nodes
-  contents.nodes = undefined
+  // const map = contents.nodes
+  // contents.nodes = undefined
 
   writeFileSync(reduxSharedFile(targetDir), v8.serialize(contents))
   // Now restore them on the redux store
-  contents.nodes = map
+  // contents.nodes = map
 
-  if (map) {
-    // Now store the nodes separately, chunk size determined by a heuristic
-    const values: Array<[string, IGatsbyNode]> = [...map.entries()]
-    const chunkSize = guessSafeChunkSize(values)
-    const chunks = Math.ceil(values.length / chunkSize)
-
-    for (let i = 0; i < chunks; ++i) {
-      writeFileSync(
-        reduxChunkedNodesFilePrefix(targetDir) + i,
-        v8.serialize(values.slice(i * chunkSize, i * chunkSize + chunkSize))
-      )
-    }
-  }
+  // if (map) {
+  //   // Now store the nodes separately, chunk size determined by a heuristic
+  //   const values: Array<[string, IGatsbyNode]> = [...map.entries()]
+  //   const chunkSize = guessSafeChunkSize(values)
+  //   const chunks = Math.ceil(values.length / chunkSize)
+  //
+  //   for (let i = 0; i < chunks; ++i) {
+  //     writeFileSync(
+  //       reduxChunkedNodesFilePrefix(targetDir) + i,
+  //       v8.serialize(values.slice(i * chunkSize, i * chunkSize + chunkSize))
+  //     )
+  //   }
+  // }
 }
 
 function safelyRenameToBak(reduxCacheFolder: string): string {
