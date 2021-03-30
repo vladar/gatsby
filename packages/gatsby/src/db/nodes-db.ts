@@ -20,7 +20,7 @@ let databases
 function getRootDb(): RootDatabase {
   if (!rootDb) {
     const readOnly = Boolean(process.env.GATSBY_REPLICA)
-    console.log(`readOnly?`, readOnly, process.env.GATSBY_REPLICA)
+    console.log(`GATSBY_REPLICA`, process.env.GATSBY_REPLICA)
     rootDb = open({
       name: `root`,
       path: process.cwd() + `/.data/` + rootDbFile,
