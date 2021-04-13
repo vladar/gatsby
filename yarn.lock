@@ -16217,6 +16217,18 @@ livereload-js@^2.3.0:
   version "2.3.0"
   resolved "https://registry.yarnpkg.com/livereload-js/-/livereload-js-2.3.0.tgz#c3ab22e8aaf5bf3505d80d098cbad67726548c9a"
 
+lmdb-store@^1.1.12:
+  version "1.2.3"
+  resolved "https://registry.yarnpkg.com/lmdb-store/-/lmdb-store-1.2.3.tgz#a12e79898ba0c5121a8a84d7f44806d0dee45570"
+  integrity sha512-0pR+96b1Yu+TVGhH83SLJD8zbyim8D7um7rzAnruoLvSTFMB7bRq6lsNJXN5Kxp/YPzNB/UO6ZwLBdU85aAsxw==
+  dependencies:
+    mkdirp "^1.0.4"
+    nan "^2.14.2"
+    node-gyp-build "^4.2.3"
+    weak-lru-cache "^0.4.1"
+  optionalDependencies:
+    msgpackr "^1.2.7"
+
 load-bmfont@^1.3.1, load-bmfont@^1.4.0:
   version "1.4.0"
   resolved "https://registry.yarnpkg.com/load-bmfont/-/load-bmfont-1.4.0.tgz#75f17070b14a8c785fe7f5bee2e6fd4f98093b6b"
@@ -17947,6 +17959,21 @@ ms@2.1.2, ms@^2.0.0, ms@^2.1.1:
   resolved "https://registry.yarnpkg.com/ms/-/ms-2.1.2.tgz#d09d1f357b443f493382a8eb3ccd183872ae6009"
   integrity sha512-sGkPx+VjMtmA6MX27oA4FBFELFCZZ4S4XqeGOXCv68tT+jb3vk/RyaKWP0PTKyWtmLSM0b+adUTEvbs1PEaH2w==
 
+msgpackr-extract@^1.0.6:
+  version "1.0.6"
+  resolved "https://registry.yarnpkg.com/msgpackr-extract/-/msgpackr-extract-1.0.6.tgz#65713a266de36d7dce8edcb766a7b4e5aa5f12ca"
+  integrity sha512-xDZjVWdBDQqohlB14/tbuhtFGsnQqZxE9/aJNz4iTxfGANtuajSCC6wJ72vYPR/k3hKtgLyL76E7xi6t2hcS+Q==
+  dependencies:
+    nan "^2.14.2"
+    node-gyp-build "^4.2.3"
+
+msgpackr@^1.2.7:
+  version "1.2.7"
+  resolved "https://registry.yarnpkg.com/msgpackr/-/msgpackr-1.2.7.tgz#374e17a294b52f2155bf3d54182a0888be286cad"
+  integrity sha512-U6Sef+XZjTRQoXZt9GPFf/2h4yhjsB2Kvb1Uq6N19wliryVvrq8onYPzgFnm9/byjDzpRWbJqXesp2AqX15Htg==
+  optionalDependencies:
+    msgpackr-extract "^1.0.6"
+
 msw@^0.25.0:
   version "0.25.0"
   resolved "https://registry.yarnpkg.com/msw/-/msw-0.25.0.tgz#a743cd2c11e7aec28b2597cb133afa8dc7044acc"
@@ -18021,6 +18048,11 @@ nan@^2.10.0, nan@^2.9.2:
   version "2.14.0"
   resolved "https://registry.yarnpkg.com/nan/-/nan-2.14.0.tgz#7818f722027b2459a86f0295d434d1fc2336c52c"
   integrity sha512-INOFj37C7k3AfaNTtX8RhsTw7qRy7eLET14cROi9+5HAVbbHuIWUHEauBv5qT4Av2tWasiTY1Jw6puUNqRJXQg==
+
+nan@^2.14.2:
+  version "2.14.2"
+  resolved "https://registry.yarnpkg.com/nan/-/nan-2.14.2.tgz#f5376400695168f4cc694ac9393d0c9585eeea19"
+  integrity sha512-M2ufzIiINKCuDfBSAUr1vWQ+vuVcA9kqx8JJUsbQi6yf1uGRyb7HfpdfUr5qLXf3B/t8dPvcjhKMmlfnP47EzQ==
 
 nanoclone@^0.2.1:
   version "0.2.1"
@@ -18248,6 +18280,11 @@ node-forge@^0.10.0:
   version "0.10.0"
   resolved "https://registry.yarnpkg.com/node-forge/-/node-forge-0.10.0.tgz#32dea2afb3e9926f02ee5ce8794902691a676bf3"
   integrity sha512-PPmu8eEeG9saEUvI97fm4OYxXVB6bFvyNTyiUOBichBpFG8A1Ljw3bY62+5oOjDEMHRnd0Y7HQ+x7uzxOzC6JA==
+
+node-gyp-build@^4.2.3:
+  version "4.2.3"
+  resolved "https://registry.yarnpkg.com/node-gyp-build/-/node-gyp-build-4.2.3.tgz#ce6277f853835f718829efb47db20f3e4d9c4739"
+  integrity sha512-MN6ZpzmfNCRM+3t57PTJHgHyw/h4OWnZ6mR8P5j/uZtqQr46RRuDE/P+g3n0YR/AiYXeWixZZzaip77gdICfRg==
 
 node-gyp-build@~3.7.0:
   version "3.7.0"
@@ -26874,6 +26911,11 @@ wcwidth@^1.0.0:
   resolved "https://registry.yarnpkg.com/wcwidth/-/wcwidth-1.0.1.tgz#f0b0dcf915bc5ff1528afadb2c0e17b532da2fe8"
   dependencies:
     defaults "^1.0.3"
+
+weak-lru-cache@^0.4.1:
+  version "0.4.1"
+  resolved "https://registry.yarnpkg.com/weak-lru-cache/-/weak-lru-cache-0.4.1.tgz#d1a0600f00576e9cf836d069e4dc119b8234abde"
+  integrity sha512-NJS+edQXFd9zHuWuAWfieUDj0pAS6Qg6HX0NW548vhoU+aOSkRFZvcJC988PjVkrH/Q/p/E18bPctGoUE++Pdw==
 
 web-namespaces@^1.0.0:
   version "1.1.2"

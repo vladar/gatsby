@@ -134,7 +134,7 @@ module.exports = async function build(program: IBuildArgs): Promise<void> {
 
       if (stats.hasWarnings()) {
         const rawMessages = stats.toJson({ moduleTrace: false })
-      reportWebpackWarnings(rawMessages.warnings, report)
+        reportWebpackWarnings(rawMessages.warnings, report)
       }
     } catch (err) {
       buildActivityTimer.panic(
@@ -225,7 +225,7 @@ module.exports = async function build(program: IBuildArgs): Promise<void> {
 
   let toRegenerate = []
   let toDelete = []
-  const workerPool = WorkerPool.create()
+
   if (process.env.GATSBY_REPLICA) {
     await syncWebpackArtifacts()
 
