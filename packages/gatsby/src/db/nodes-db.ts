@@ -1,5 +1,5 @@
 import { ArrayLikeIterable, Database, open, RootDatabase } from "lmdb-store"
-import { ActionsUnion, IGatsbyNode } from "../redux/types"
+import { ActionsUnion, ICreatePageAction, IGatsbyNode } from "../redux/types"
 import { store } from "../redux"
 import { performance } from "perf_hooks"
 
@@ -8,6 +8,7 @@ interface IDatabases {
   nodesByType: Database<string, string>
   staticQueriesByTemplate: Database<Array<string>, string>
   metadata: Database<string, string>
+  pages: Database<ICreatePageAction, string>
 }
 
 const rootDbFile =
@@ -69,6 +70,12 @@ function getDatabases(): IDatabases {
       }),
       metadata: rootDb.openDB({
         name: `metadata`,
+        // @ts-ignore
+        readOnly,
+        create: !readOnly,
+      }),
+      pages: rootDb.openDB({
+        name: `pages`,
         // @ts-ignore
         readOnly,
         create: !readOnly,
@@ -176,6 +183,23 @@ export function updateNodesDb(action: ActionsUnion): void {
       }
       break
     }
+    case `CREATE_PAGE`: {
+      const { pages } = getDatabases()
+      lastOperationPromise = pages.put(action.payload.path, {
+        type: `CREATE_PAGE`,
+        plugin: action.plugin,
+        payload: action.payload,
+        contextModified: action.contextModified,
+      })
+      break
+    }
+
+    case `DELETE_PAGE`: {
+      const { pages } = getDatabases()
+      pages.remove(action.payload.path)
+      break
+    }
+
     case `SET_PROGRAM`: {
       const { metadata } = getDatabases()
       metadata.putSync(`storeState`, `STARTED`)
@@ -207,6 +231,11 @@ export function updateNodesDb(action: ActionsUnion): void {
         const { metadata } = getDatabases()
         metadata.putSync(`webpackState`, `READY`)
       }
+      // @ts-ignore
+      if (action.payload === `CREATE_PAGES_FINISHED`) {
+        const { metadata } = getDatabases()
+        metadata.putSync(`createPagesState`, `READY`)
+      }
       break
     }
     default:
@@ -217,31 +246,34 @@ export async function waitDbCommit(): Promise<void> {
   await lastOperationPromise
 }
 
-export function getStoreState(): string {
+export function getProgramState(stateKey: string): string {
   try {
-    return getDatabases().metadata.get(`storeState`) ?? `PENDING`
+    return getDatabases().metadata.get(stateKey) ?? `PENDING`
   } catch (e) {
     console.warn(e.message)
     return `WAITING`
   }
+}
+
+export function getStoreState(): string {
+  return getProgramState(`storeState`)
 }
 
 export function getWebpackState(): string {
-  try {
-    return getDatabases().metadata.get(`webpackState`) ?? `PENDING`
-  } catch (e) {
-    console.warn(e.message)
-    return `WAITING`
-  }
+  return getProgramState(`storeState`)
 }
 
-export async function storeIsReady(): Promise<void> {
+export function getCreatePagesState(): string {
+  return getProgramState(`createPagesState`)
+}
+
+export async function programIsReady(stateKey: string): Promise<void> {
   if (!process.env.GATSBY_REPLICA) {
     throw new Error(`Only allowed for replicas`)
   }
   function checkIfReady(resolve): void {
-    const state = getStoreState()
-    console.log(`[${process.env.GATSBY_REPLICA}] store: ${state}`)
+    const state = getProgramState(stateKey)
+    console.log(`[${process.env.GATSBY_REPLICA}] ${stateKey}: ${state}`)
     if (state === `READY`) {
       resolve()
     } else {
@@ -252,8 +284,22 @@ export async function storeIsReady(): Promise<void> {
   return new Promise(checkIfReady)
 }
 
+async function storeIsReady(): Promise<void> {
+  return programIsReady(`storeState`)
+}
+
+async function webpackCompiled(): Promise<void> {
+  return programIsReady(`webpackState`)
+}
+
+async function pagesCreated(): Promise<void> {
+  return programIsReady(`createPagesState`)
+}
+
 export async function syncWebpackArtifacts(): Promise<void> {
   await webpackCompiled()
+
+  console.log(`Syncing webpack artifacts!`)
 
   const { staticQueriesByTemplate } = getDatabases()
 
@@ -272,6 +318,8 @@ export async function syncWebpackArtifacts(): Promise<void> {
 export async function syncNodes(): Promise<void> {
   await storeIsReady()
 
+  console.log(`Syncing nodes!`)
+
   // Other reducers in replica expect this
   getNodes(false).forEach(node => {
     store.dispatch({
@@ -281,19 +329,14 @@ export async function syncNodes(): Promise<void> {
   })
 }
 
-async function webpackCompiled(): Promise<void> {
-  if (!process.env.GATSBY_REPLICA) {
-    throw new Error(`Only allowed for replicas`)
-  }
-  function checkIfReady(resolve): void {
-    const state = getWebpackState()
-    console.log(`[${process.env.GATSBY_REPLICA}] webpack: ${state}`)
-    if (state === `READY`) {
-      resolve()
-    } else {
-      setTimeout(() => checkIfReady(resolve), 1000)
-    }
-  }
+export async function syncPages(): Promise<void> {
+  await pagesCreated()
 
-  return new Promise(checkIfReady)
+  console.log(`Syncing pages!`)
+
+  const { pages } = getDatabases()
+
+  pages.getRange({}).forEach(({ value: action }) => {
+    store.dispatch(action)
+  })
 }

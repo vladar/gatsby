@@ -18,6 +18,8 @@ import { globalTracer } from "opentracing"
 import JestWorker from "jest-worker"
 import { handleStalePageData } from "../utils/page-data"
 import db from "../db"
+import { store } from "../redux"
+import { syncPages } from "../db/nodes-db"
 
 const tracer = globalTracer()
 
@@ -55,12 +57,21 @@ export async function bootstrap(
     reporter
   )
 
-  // TODO: pages must be created in the "main process"
-  //   and synced to replicas similar to nodes
-  //   (so do not re-create pages in replicas)
-  await createPages(context)
+  if (!process.env.GATSBY_REPLICA) {
+    // TODO: pages must be created in the "main process"
+    //   and synced to replicas similar to nodes
+    //   (so do not re-create pages in replicas)
+    await createPages(context)
 
-  await createPagesStatefully(context)
+    await createPagesStatefully(context)
+
+    store.dispatch({
+      type: `SET_PROGRAM_STATUS`,
+      payload: `CREATE_PAGES_FINISHED`,
+    })
+  } else {
+    await syncPages()
+  }
 
   await handleStalePageData()
 

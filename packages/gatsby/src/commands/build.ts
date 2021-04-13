@@ -166,26 +166,24 @@ module.exports = async function build(program: IBuildArgs): Promise<void> {
 
       rewriteActivityTimer.end()
     }
-  }
 
-  if (!process.env.GATSBY_REPLICA) {
     // FIXME: why markWebpackStatusAsDone is here (after pending page data writes)?
     markWebpackStatusAsDone()
 
-    if (telemetry.isTrackingEnabled()) {
-      // transform asset size to kB (from bytes) to fit 64 bit to numbers
-      const bundleSizes = stats
-        .toJson({ assets: true })
-        .assets.filter(asset => asset.name.endsWith(`.js`))
-        .map(asset => asset.size / 1000)
-      const pageDataSizes = [...store.getState().pageDataStats.values()]
-
-      telemetry.addSiteMeasurement(`BUILD_END`, {
-        bundleStats: telemetry.aggregateStats(bundleSizes),
-        pageDataStats: telemetry.aggregateStats(pageDataSizes),
-        queryStats: graphqlRunner?.getStats(),
-      })
-    }
+    // if (telemetry.isTrackingEnabled()) {
+    //   // transform asset size to kB (from bytes) to fit 64 bit to numbers
+    //   const bundleSizes = stats
+    //     .toJson({ assets: true })
+    //     .assets.filter(asset => asset.name.endsWith(`.js`))
+    //     .map(asset => asset.size / 1000)
+    //   const pageDataSizes = [...store.getState().pageDataStats.values()]
+    //
+    //   telemetry.addSiteMeasurement(`BUILD_END`, {
+    //     bundleStats: telemetry.aggregateStats(bundleSizes),
+    //     pageDataStats: telemetry.aggregateStats(pageDataSizes),
+    //     queryStats: graphqlRunner?.getStats(),
+    //   })
+    // }
   }
 
   store.dispatch(actions.setProgramStatus(`BOOTSTRAP_QUERY_RUNNING_FINISHED`))
