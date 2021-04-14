@@ -3,9 +3,11 @@ import { ActionsUnion, ICreatePageAction, IGatsbyNode } from "../redux/types"
 import { store } from "../redux"
 import { performance } from "perf_hooks"
 
+type LogOffset = string
+
 interface IDatabases {
-  actionLog: Database<ActionsUnion, string>
-  nodes: Database<number, string>
+  actionLog: Database<ActionsUnion, LogOffset>
+  nodes: Database<LogOffset, string>
   nodesByType: Database<string, string>
   staticQueriesByTemplate: Database<Array<string>, string>
   metadata: Database<string, string>
@@ -159,6 +161,39 @@ export function getTypes(): Array<string> {
   return getDatabases().nodesByType.getKeys({}).asArray
 }
 
+let binaryLog
+export function getReadonlyBinaryLog(): Database<Buffer, LogOffset> {
+  // This is supposed to be called from the other process
+  // (it is highly not recommended to open the same db twice from the same process)
+  if (!binaryLog && rootDb) {
+    throw new Error(
+      `Cannot open action log in binary format. Root database is already opened.`
+    )
+  }
+  if (!binaryLog) {
+    // The same actionLog but opened with `binary` encoding to read raw messages
+    // @ts-ignore
+    binaryLog = getRootDb().openDB({
+      name: `actionLog`,
+      encoding: `binary`,
+      // cache: true,
+      keyIsUint32: false, // Should be `true`. See https://github.com/DoctorEvidence/lmdb-store/issues/42
+      // @ts-ignore
+      readOnly: true,
+    })
+  }
+  return binaryLog
+}
+
+export function readBinaryLogItems(
+  offset: string | number
+): ArrayLikeIterable<{ key: LogOffset; value: Buffer }> {
+  return getReadonlyBinaryLog().getRange({
+    start: padStr(offset),
+    snapshot: false,
+  })
+}
+
 let lastOperationPromise: Promise<any> = Promise.resolve()
 let writeTime = 0
 const isReplica = process.env.GATSBY_REPLICA
@@ -310,7 +345,7 @@ function getLastOffset(): number {
   )
 }
 
-export function getLastOffsetAsString(): string {
+export function getLastOffsetAsString(): LogOffset {
   return padStr(getLastOffset())
 }
 

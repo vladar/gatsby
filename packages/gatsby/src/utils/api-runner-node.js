@@ -253,7 +253,10 @@ const pluginNodeCache = new Map()
 const availableActionsCache = new Map()
 let publicPath
 
-const isReplica = Boolean(process.env.GATSBY_REPLICA)
+const isWorker = Boolean(process.env.GATSBY_REPLICA)
+const isReplica = Boolean(process.env.REMOTE_STORE_URL)
+
+const shouldSkipSourcing = plugin => !plugin.name.includes(`internal`)
 
 const runAPI = async (plugin, api, args, activity) => {
   let gatsbyNode = pluginNodeCache.get(plugin.name)
@@ -411,8 +414,14 @@ const runAPI = async (plugin, api, args, activity) => {
       plugin.pluginOptions,
     ]
 
-    if (api === `sourceNodes` && `pl` && isReplica) {
+    if (api === `sourceNodes` && isWorker) {
       return null
+    }
+    if (api === `sourceNodes` && isReplica && shouldSkipSourcing(plugin)) {
+      return null
+    }
+    if (api === `sourceNodes` && isReplica) {
+      console.log(`Running sourcing for plugin`, plugin)
     }
 
     // If the plugin is using a callback use that otherwise

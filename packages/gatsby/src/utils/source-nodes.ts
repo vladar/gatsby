@@ -8,6 +8,7 @@ import { IGatsbyState } from "../redux/types"
 const { deleteNode } = actions
 import { Node } from "../../index"
 import { syncNodes, waitDbCommit } from "../db/nodes-db"
+import { replicateStore } from "../db/replication"
 
 /**
  * Finds the name of all plugins which implement Gatsby APIs that
@@ -97,6 +98,10 @@ export default async ({
   parentSpan: Span
   deferNodeMutation: boolean
 }): Promise<void> => {
+  if (process.env.REMOTE_STORE_URL) {
+    await replicateStore(process.env.REMOTE_STORE_URL)
+    // We still want to run sourcing (but limit it to internal plugins internally)
+  }
   await apiRunner(`sourceNodes`, {
     traceId: `initial-sourceNodes`,
     waitForCascadingActions: true,
