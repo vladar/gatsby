@@ -4,7 +4,8 @@ import { store } from "../redux"
 import { performance } from "perf_hooks"
 
 interface IDatabases {
-  nodes: Database<IGatsbyNode, string>
+  actionLog: Database<ActionsUnion, string>
+  nodes: Database<number, string>
   nodesByType: Database<string, string>
   staticQueriesByTemplate: Database<Array<string>, string>
   metadata: Database<string, string>
@@ -44,9 +45,16 @@ function getDatabases(): IDatabases {
     const rootDb = getRootDb()
     const readOnly = Boolean(process.env.GATSBY_REPLICA)
     databases = {
+      actionLog: rootDb.openDB({
+        name: `actionLog`,
+        // cache: true,
+        keyIsUint32: false, // Should be `true`. See https://github.com/DoctorEvidence/lmdb-store/issues/42
+        // @ts-ignore
+        readOnly,
+        create: !readOnly,
+      }),
       nodes: rootDb.openDB({
         name: `nodes`,
-        cache: true,
         // cache: true,
         // @ts-ignore
         readOnly,
@@ -126,7 +134,25 @@ export function getNodesByType(type: string): Array<IGatsbyNode> {
 
 export function getNode(id: string): IGatsbyNode | undefined {
   if (!id) return undefined
-  return getDatabases().nodes.get(id)
+  const { nodes, actionLog } = getDatabases()
+  const logOffset = nodes.get(id)
+
+  if (!logOffset) {
+    return undefined
+  }
+  if (typeof logOffset !== `string`) {
+    console.log(id, typeof logOffset, logOffset)
+    throw new Error(`Oops!`)
+  }
+  // @ts-ignore
+  const logEntry = actionLog.get(logOffset)
+  // @ts-ignore
+  if (!logEntry) {
+    console.log(`No log entry: `, logOffset)
+    throw new Error(`Ooops`)
+  }
+  // @ts-ignore
+  return logEntry.payload
 }
 
 export function getTypes(): Array<string> {
@@ -135,14 +161,16 @@ export function getTypes(): Array<string> {
 
 let lastOperationPromise: Promise<any> = Promise.resolve()
 let writeTime = 0
+const isReplica = process.env.GATSBY_REPLICA
 
 export function updateNodesDb(action: ActionsUnion): void {
-  if (process.env.GATSBY_REPLICA) {
+  if (isReplica) {
     return
   }
   switch (action.type) {
     case `DELETE_CACHE`: {
-      const { nodes, nodesByType } = getDatabases()
+      const { actionLog, nodes, nodesByType } = getDatabases()
+      actionLog.clear()
       nodes.clear()
       nodesByType.clear()
       // Issue a transaction to make sure changes are commited
@@ -154,7 +182,7 @@ export function updateNodesDb(action: ActionsUnion): void {
     case `CREATE_NODE`:
     case `ADD_FIELD_TO_NODE`:
     case `ADD_CHILD_NODE_TO_PARENT_NODE`: {
-      const { nodes, nodesByType } = getDatabases()
+      const { actionLog, nodes, nodesByType } = getDatabases()
       const writeStart = performance.now()
 
       // Transaction will commit changes to disk immediately.
@@ -166,18 +194,35 @@ export function updateNodesDb(action: ActionsUnion): void {
       //  before finishing sourcing (and on any stateful source node)
       // getRootDb().transaction(() => {
       // nodesByType db uses dupSort, so `put` will effectively append an id
+      const time = logicalClockTickAsString()
+      // @ts-ignore
       nodesByType.put(action.payload.internal.type, action.payload.id)
-      lastOperationPromise = nodes.put(action.payload.id, action.payload)
+      try {
+        actionLog.put(time, {
+          type: action.type,
+          // @ts-ignore
+          payload: action.payload,
+          // @ts-ignore
+          plugin: action.plugin,
+        })
+        lastOperationPromise = nodes.put(action.payload.id, time)
+      } catch (e) {
+        console.log(`FAIL!`, action)
+        process.exit(1)
+        throw e
+      }
       // })
       writeTime += performance.now() - writeStart
       break
     }
     case `DELETE_NODE`: {
       if (action.payload) {
-        const { nodes, nodesByType } = getDatabases()
+        const { actionLog, nodes, nodesByType } = getDatabases()
         const payload = action.payload
         // getRootDb().transaction(() => {
+        const time = logicalClockTickAsString()
         nodesByType.remove(payload.internal.type, payload.id)
+        actionLog.put(time, action)
         lastOperationPromise = nodes.remove(payload.id)
         // })
       }
@@ -240,6 +285,33 @@ export function updateNodesDb(action: ActionsUnion): void {
     }
     default:
   }
+}
+
+let time
+function logicalClockTick(): number {
+  if (!time) {
+    time = getLastOffset()
+  }
+  time++
+  return time
+}
+
+function padStr(value: number | string, padding = `00000000000`): string {
+  return (padding + value).slice(-padding.length)
+}
+
+function logicalClockTickAsString(): string {
+  return padStr(logicalClockTick())
+}
+
+function getLastOffset(): number {
+  return (
+    Number(getDatabases().actionLog.getKeys({ reverse: true, limit: 1 })) || 0
+  )
+}
+
+export function getLastOffsetAsString(): string {
+  return padStr(getLastOffset())
 }
 
 export async function waitDbCommit(): Promise<void> {
@@ -319,6 +391,15 @@ export async function syncNodes(): Promise<void> {
   await storeIsReady()
 
   console.log(`Syncing nodes!`)
+
+  // const { actionLog } = getDatabases()
+  // console.log(`actionLog traversal`)
+  // console.log(``)
+  // actionLog.getRange({ snapshot: false }).forEach(({ key, value }) => {
+  //   console.log(key, value)
+  // })
+  // console.log(``)
+  // process.exit(1)
 
   // Other reducers in replica expect this
   getNodes(false).forEach(node => {
