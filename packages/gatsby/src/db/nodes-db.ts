@@ -341,7 +341,9 @@ function logicalClockTickAsString(): string {
 
 function getLastOffset(): number {
   return (
-    Number(getDatabases().actionLog.getKeys({ reverse: true, limit: 1 })) || 0
+    Number(
+      getDatabases().actionLog.getKeys({ reverse: true, limit: 1 }).asArray[0]
+    ) || 0
   )
 }
 
