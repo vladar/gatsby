@@ -233,17 +233,17 @@ export function updateNodesDb(action: ActionsUnion): void {
       // @ts-ignore
       nodesByType.put(action.payload.internal.type, action.payload.id)
       try {
+        const { pluginOptions, ...other } = action.plugin || {}
         actionLog.put(time, {
           type: action.type,
           // @ts-ignore
           payload: action.payload,
           // @ts-ignore
-          plugin: action.plugin,
+          plugin: other,
         })
         lastOperationPromise = nodes.put(action.payload.id, time)
       } catch (e) {
-        console.log(`FAIL!`, action)
-        process.exit(1)
+        console.log(`FAIL!`, action, e)
         throw e
       }
       // })
