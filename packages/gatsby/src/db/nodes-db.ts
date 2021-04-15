@@ -3,7 +3,7 @@ import { ActionsUnion, ICreatePageAction, IGatsbyNode } from "../redux/types"
 import { store } from "../redux"
 import { performance } from "perf_hooks"
 
-type LogOffset = string
+type LogOffset = number
 
 interface IDatabases {
   actionLog: Database<ActionsUnion, LogOffset>
@@ -24,7 +24,6 @@ let databases
 function getRootDb(): RootDatabase {
   if (!rootDb) {
     const readOnly = Boolean(process.env.GATSBY_REPLICA)
-    console.log(`GATSBY_REPLICA`, process.env.GATSBY_REPLICA)
     rootDb = open({
       name: `root`,
       path: process.cwd() + `/.data/` + rootDbFile,
@@ -32,7 +31,7 @@ function getRootDb(): RootDatabase {
       sharedStructuresKey: Symbol.for(`structures`),
       // commitDelay: 100,
       maxDbs: 12,
-      // noSync: true, // FIXME: remove this when switching to batched writes
+      noSync: true, // FIXME: remove this when switching to batched writes
       readOnly,
       // FIXME: `create: true` by default; but it fails with replica
       // @ts-ignore
@@ -50,7 +49,7 @@ function getDatabases(): IDatabases {
       actionLog: rootDb.openDB({
         name: `actionLog`,
         // cache: true,
-        keyIsUint32: false, // Should be `true`. See https://github.com/DoctorEvidence/lmdb-store/issues/42
+        keyIsUint32: true,
         // @ts-ignore
         readOnly,
         create: !readOnly,
@@ -142,7 +141,7 @@ export function getNode(id: string): IGatsbyNode | undefined {
   if (!logOffset) {
     return undefined
   }
-  if (typeof logOffset !== `string`) {
+  if (typeof logOffset !== `number`) {
     console.log(id, typeof logOffset, logOffset)
     throw new Error(`Oops!`)
   }
@@ -150,8 +149,9 @@ export function getNode(id: string): IGatsbyNode | undefined {
   const logEntry = actionLog.get(logOffset)
   // @ts-ignore
   if (!logEntry) {
-    console.log(`No log entry: `, logOffset)
-    throw new Error(`Ooops`)
+    console.warn(`No log entry: `, logOffset)
+    return undefined
+    // throw new Error(`Ooops`)
   }
   // @ts-ignore
   return logEntry.payload
@@ -177,7 +177,7 @@ export function getReadonlyBinaryLog(): Database<Buffer, LogOffset> {
       name: `actionLog`,
       encoding: `binary`,
       // cache: true,
-      keyIsUint32: false, // Should be `true`. See https://github.com/DoctorEvidence/lmdb-store/issues/42
+      keyIsUint32: true,
       // @ts-ignore
       readOnly: true,
     })
@@ -186,10 +186,10 @@ export function getReadonlyBinaryLog(): Database<Buffer, LogOffset> {
 }
 
 export function readBinaryLogItems(
-  offset: string | number
+  offset: number
 ): ArrayLikeIterable<{ key: LogOffset; value: Buffer }> {
   return getReadonlyBinaryLog().getRange({
-    start: padStr(offset),
+    start: offset,
     snapshot: false,
   })
 }
@@ -229,10 +229,11 @@ export function updateNodesDb(action: ActionsUnion): void {
       //  before finishing sourcing (and on any stateful source node)
       // getRootDb().transaction(() => {
       // nodesByType db uses dupSort, so `put` will effectively append an id
-      const time = logicalClockTickAsString()
+      const time = logicalClockTick()
       // @ts-ignore
       nodesByType.put(action.payload.internal.type, action.payload.id)
       try {
+        // @ts-ignore
         const { pluginOptions, ...other } = action.plugin || {}
         actionLog.put(time, {
           type: action.type,
@@ -255,7 +256,7 @@ export function updateNodesDb(action: ActionsUnion): void {
         const { actionLog, nodes, nodesByType } = getDatabases()
         const payload = action.payload
         // getRootDb().transaction(() => {
-        const time = logicalClockTickAsString()
+        const time = logicalClockTick()
         nodesByType.remove(payload.internal.type, payload.id)
         actionLog.put(time, action)
         lastOperationPromise = nodes.remove(payload.id)
@@ -325,30 +326,18 @@ export function updateNodesDb(action: ActionsUnion): void {
 let time
 function logicalClockTick(): number {
   if (!time) {
-    time = getLastOffset()
+    time = getLastLogOffset()
   }
   time++
   return time
 }
 
-function padStr(value: number | string, padding = `00000000000`): string {
-  return (padding + value).slice(-padding.length)
-}
-
-function logicalClockTickAsString(): string {
-  return padStr(logicalClockTick())
-}
-
-function getLastOffset(): number {
+export function getLastLogOffset(): number {
   return (
     Number(
       getDatabases().actionLog.getKeys({ reverse: true, limit: 1 }).asArray[0]
     ) || 0
   )
-}
-
-export function getLastOffsetAsString(): LogOffset {
-  return padStr(getLastOffset())
 }
 
 export async function waitDbCommit(): Promise<void> {

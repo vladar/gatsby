@@ -3,19 +3,19 @@ import * as url from "url"
 import { Readable, pipeline } from "stream"
 // import { createGzip } from "zlib"
 import { createHash } from "crypto"
-import { getLastOffsetAsString, readBinaryLogItems } from "./nodes-db"
+import { getLastLogOffset, readBinaryLogItems } from "./nodes-db"
 import { Decoder } from "msgpackr"
 import { store } from "../redux"
 
 interface ILogItem {
-  key: string
+  key: number
   value: Buffer
   length: number
   md5: string
 }
 
 export async function replicateStore(sourceStoreURI: string): Promise<void> {
-  const lastOffset = getLastOffsetAsString()
+  const lastOffset = getLastLogOffset()
   const decoder = new Decoder()
   const ignoredNodeTypes = new Set([
     `SitePlugin`,
@@ -29,18 +29,23 @@ export async function replicateStore(sourceStoreURI: string): Promise<void> {
     //   (additional validation via log overlap)
     const start = Date.now()
     let count = 0
+    let size = 0
     for await (const logItem of genLogItems(response)) {
-      const { value } = logItem
+      const { value, length } = logItem
       const action = decoder.decode(value)
       // @ts-ignore
       if (ignoredNodeTypes.has(action.payload.internal.type)) {
         continue
       }
       count++
+      size += length
       // console.log(`syncing action`, action.type, action.payload.internal.type)
       store.dispatch(action)
     }
-    console.log(`Replicated ${count} actions in ${Date.now() - start}ms`)
+    console.log(
+      `Synced ${count} actions in ${Date.now() - start}ms; ` +
+        `total size: ${(size / (1024 * 1024)).toFixed(2)}MB`
+    )
   }
 
   const uri = `${sourceStoreURI}?offset=${lastOffset}`
@@ -80,18 +85,18 @@ async function* genLogItems(
 }
 
 function extractNextMessage(chunk: Buffer): ILogItem | void {
-  if (chunk.length < 11 + 32 + 4) {
+  if (chunk.length < 4 + 32 + 4) {
     return undefined
   }
-  const key = chunk.toString(`ascii`, 0, 11)
-  const md5checksum = chunk.toString(`ascii`, 11, 11 + 32)
-  const dataSize = chunk.readUInt32LE(11 + 32)
-  const totalMessageLength = 11 + 32 + 4 + dataSize
+  const key = chunk.readUInt32LE(0)
+  const md5checksum = chunk.toString(`ascii`, 4, 4 + 32)
+  const dataSize = chunk.readUInt32LE(4 + 32)
+  const totalMessageLength = 4 + 32 + 4 + dataSize
 
   if (chunk.length < totalMessageLength) {
     return undefined
   }
-  const value = chunk.slice(11 + 32 + 4, totalMessageLength)
+  const value = chunk.slice(4 + 32 + 4, totalMessageLength)
   const md5 = createHash(`md5`).update(value).digest(`hex`)
 
   if (md5checksum !== md5) {
@@ -113,45 +118,67 @@ function extractNextMessage(chunk: Buffer): ILogItem | void {
 // ---------------------------------------------------
 //                SERVER PART BELOW
 // ---------------------------------------------------
+async function* genMessages(offset: number): AsyncGenerator<Buffer> {
+  console.log(`Starting sync from offset: ${offset}`)
+  let generatedBytes = 0
+  let avgActionSize = 0
+  let totalActionCount = 0
+  let lastOffset = offset
+  const start = Date.now()
 
-async function* genMessages(offset): AsyncGenerator<Buffer> {
+  const report = (): string =>
+    `Synced ${totalActionCount} actions from ${offset} to ${lastOffset} ` +
+    `in ${((Date.now() - start) / 1000).toFixed(2)} seconds.\n` +
+    `Total size: ${(generatedBytes / (1024 * 1024)).toFixed(2)}MB; ` +
+    `avg action size: ${avgActionSize.toFixed(0)} bytes`
+
   for await (const { key, value } of readBinaryLogItems(offset)) {
     const md5 = createHash(`md5`).update(value).digest(`hex`)
-    if (key.length !== 11) {
+    if (typeof key !== `number`) {
       throw new Error(
-        `Unexpected length of key ${key} (expected 11 got ${key.length})`
+        `Unexpected key ${key} tye (expected number got ${typeof key})`
       )
     }
-    if (key === `00000000001`) {
-      console.log(`KEY ${key} data length: ${value.length}`)
-    }
 
-    const dataSize = Buffer.allocUnsafe(4)
-    dataSize.writeUInt32LE(value.length, 0)
+    const keyBuf = Buffer.allocUnsafe(4)
+    keyBuf.writeUInt32LE(key, 0)
 
-    // TODO: switch to binary format for key and md5 too
+    const dataSizeBuf = Buffer.allocUnsafe(4)
+    dataSizeBuf.writeUInt32LE(value.length, 0)
+
+    // TODO: switch to binary format for md5 too
+    const totalBufferLength = 4 + 32 + 4 + value.length
+    totalActionCount++
+    generatedBytes += totalBufferLength
+    avgActionSize = generatedBytes / totalActionCount
+    lastOffset = key
+
     yield Buffer.concat(
-      [Buffer.from(key, `ascii`), Buffer.from(md5, `ascii`), dataSize, value],
-      11 + 32 + 4 + value.length
+      [keyBuf, Buffer.from(md5, `ascii`), dataSizeBuf, value],
+      totalBufferLength
     )
+    if (key % 100000 === 0) {
+      console.log(report())
+    }
   }
+  console.log(`Done! ${report()}`)
+  console.log(``)
 }
 
 export function startReplicationServer() {
   createServer((request, response) => {
     const queryObject = url.parse(request.url ?? ``, true).query
-    const offset = queryObject.offset ?? 0
+    const offset = Number(queryObject.offset) || 0
     pipeline(
       Readable.from(genMessages(offset)),
       // createGzip(),
       response,
-      console.error
+      err => (err ? console.error(err) : undefined)
     )
     const headers = {
       "Content-Type": `application/octet-stream`,
       // "Content-Encoding": `gzip`,
     }
-    response.setHeader(`Content-Type`, `text/plain`)
     response.writeHead(200, headers)
   }).listen(8383)
 }
