@@ -112,6 +112,8 @@ async function getContentfulClient({ pluginConfig, reporter }) {
         !response.isAxiosError &&
         response?.data.items
       ) {
+        syncItemCount += response.data.items.length
+        syncProgress.total = syncItemCount
         syncProgress.tick(response.data.items.length)
       }
 
