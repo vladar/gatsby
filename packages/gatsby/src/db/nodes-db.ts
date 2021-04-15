@@ -48,7 +48,7 @@ function getDatabases(): IDatabases {
     databases = {
       actionLog: rootDb.openDB({
         name: `actionLog`,
-        // cache: true,
+        cache: true,
         keyIsUint32: true,
         // @ts-ignore
         readOnly,
