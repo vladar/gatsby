@@ -16217,10 +16217,10 @@ livereload-js@^2.3.0:
   version "2.3.0"
   resolved "https://registry.yarnpkg.com/livereload-js/-/livereload-js-2.3.0.tgz#c3ab22e8aaf5bf3505d80d098cbad67726548c9a"
 
-lmdb-store@^1.1.12:
-  version "1.2.3"
-  resolved "https://registry.yarnpkg.com/lmdb-store/-/lmdb-store-1.2.3.tgz#a12e79898ba0c5121a8a84d7f44806d0dee45570"
-  integrity sha512-0pR+96b1Yu+TVGhH83SLJD8zbyim8D7um7rzAnruoLvSTFMB7bRq6lsNJXN5Kxp/YPzNB/UO6ZwLBdU85aAsxw==
+lmdb-store@^1.2.4:
+  version "1.2.4"
+  resolved "https://registry.yarnpkg.com/lmdb-store/-/lmdb-store-1.2.4.tgz#5ffe223fb7b899b870a9055468dc908544d072ba"
+  integrity sha512-KydyC34i7BxQFeEXeX2Ub73u8Iiyf1QxLmhHMxWWWWqNFr6tk8vUnLtf8HpJmubiOWg77QZjlwbsFRKIofEHdw==
   dependencies:
     mkdirp "^1.0.4"
     nan "^2.14.2"
