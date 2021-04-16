@@ -204,13 +204,16 @@ export function updateNodesDb(action: ActionsUnion): void {
   }
   switch (action.type) {
     case `DELETE_CACHE`: {
-      const { actionLog, nodes, nodesByType } = getDatabases()
-      actionLog.clear()
-      nodes.clear()
-      nodesByType.clear()
+      const dbs = getDatabases()
+      dbs.actionLog.clear()
+      dbs.nodes.clear()
+      dbs.nodesByType.clear()
+      dbs.pages.clear()
+      dbs.staticQueriesByTemplate.clear()
+      dbs.metadata.clear()
       // Issue a transaction to make sure changes are commited
-      nodes.transaction(() => {
-        nodes.removeSync(``)
+      dbs.nodes.transaction(() => {
+        dbs.nodes.removeSync(``)
       })
       break
     }
@@ -266,7 +269,7 @@ export function updateNodesDb(action: ActionsUnion): void {
     }
     case `CREATE_PAGE`: {
       const { pages } = getDatabases()
-      lastOperationPromise = pages.put(action.payload.path, {
+      pages.putSync(action.payload.path, {
         type: `CREATE_PAGE`,
         plugin: action.plugin,
         payload: action.payload,
@@ -277,7 +280,7 @@ export function updateNodesDb(action: ActionsUnion): void {
 
     case `DELETE_PAGE`: {
       const { pages } = getDatabases()
-      pages.remove(action.payload.path)
+      pages.removeSync(action.payload.path)
       break
     }
 
@@ -428,12 +431,15 @@ export async function syncNodes(): Promise<void> {
   // process.exit(1)
 
   // Other reducers in replica expect this
+  let count = 0
   getNodes(false).forEach(node => {
+    count++
     store.dispatch({
       type: `CREATE_NODE`,
       payload: node,
     })
   })
+  console.log(`Synced ${count} nodes.`)
 }
 
 export async function syncPages(): Promise<void> {
@@ -443,7 +449,19 @@ export async function syncPages(): Promise<void> {
 
   const { pages } = getDatabases()
 
-  pages.getRange({}).forEach(({ value: action }) => {
-    store.dispatch(action)
+  let count = 0
+  let badCount = 0
+  pages.getRange({ snapshot: false }).forEach(({ value: action }) => {
+    if (!action || !action.type) {
+      if (badCount++ < 2) {
+        console.log(`Bad action:`, action)
+      }
+    } else {
+      // TODO: just store payload, run CREATE_PAGE action here
+      count++
+      store.dispatch({ ...action })
+    }
   })
+
+  console.log(`Synced ${count} pages. Got ${badCount} actions.`)
 }

@@ -19,7 +19,7 @@ import JestWorker from "jest-worker"
 import { handleStalePageData } from "../utils/page-data"
 import db from "../db"
 import { store } from "../redux"
-import { syncPages } from "../db/nodes-db"
+import { syncPages, waitDbCommit } from "../db/nodes-db"
 
 const tracer = globalTracer()
 
@@ -63,7 +63,11 @@ export async function bootstrap(
     //   (so do not re-create pages in replicas)
     await createPages(context)
 
+    await waitDbCommit()
+
     await createPagesStatefully(context)
+
+    await waitDbCommit()
 
     store.dispatch({
       type: `SET_PROGRAM_STATUS`,

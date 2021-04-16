@@ -415,9 +415,15 @@ const runAPI = async (plugin, api, args, activity) => {
     ]
 
     if (api === `sourceNodes` && isWorker) {
+      pluginSpan.finish()
+      apiFinished = true
+      endInProgressActivitiesCreatedByThisRun()
       return null
     }
     if (api === `sourceNodes` && isReplica && shouldSkipSourcing(plugin)) {
+      pluginSpan.finish()
+      apiFinished = true
+      endInProgressActivitiesCreatedByThisRun()
       return null
     }
     if (api === `sourceNodes` && isReplica) {
