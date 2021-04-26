@@ -23,6 +23,8 @@ import {
   getNodesFromCacheByValue,
   intersectNodesByCounter,
   IFilterCache,
+  GatsbyNodeDescriptor,
+  getNode,
 } from "./nodes"
 import { IGraphQLRunnerStats } from "../query/types"
 
@@ -126,7 +128,7 @@ export function applyFastFilters(
   filters: Array<DbQuery>,
   nodeTypeNames: Array<string>,
   filtersCache: FiltersCache
-): Array<IGatsbyNode> | null {
+): Array<GatsbyNodeDescriptor> | null {
   if (!filtersCache) {
     // If no filter cache is passed on, explicitly don't use one
     return null
@@ -153,8 +155,12 @@ export function applyFastFilters(
 
     while (nodesPerValueArrs.length > 1) {
       // TS limitation: cannot guard against .pop(), so we must double cast
-      const a = (nodesPerValueArrs.pop() as unknown) as Array<IGatsbyNode>
-      const b = (nodesPerValueArrs.pop() as unknown) as Array<IGatsbyNode>
+      const a = (nodesPerValueArrs.pop() as unknown) as Array<
+        GatsbyNodeDescriptor
+      >
+      const b = (nodesPerValueArrs.pop() as unknown) as Array<
+        GatsbyNodeDescriptor
+      >
       nodesPerValueArrs.push(intersectNodesByCounter(a, b))
     }
 
@@ -176,8 +182,8 @@ function getBucketsForFilters(
   filters: Array<DbQuery>,
   nodeTypeNames: Array<string>,
   filtersCache: FiltersCache
-): Array<Array<IGatsbyNode>> | undefined {
-  const nodesPerValueArrs: Array<Array<IGatsbyNode>> = []
+): Array<Array<GatsbyNodeDescriptor>> | undefined {
+  const nodesPerValueArrs: Array<Array<GatsbyNodeDescriptor>> = []
 
   // Fail fast while trying to create and get the value-cache for each path
   const every = filters.every(filter => {
@@ -222,7 +228,7 @@ function getBucketsForQueryFilter(
   filter: IDbQueryQuery,
   nodeTypeNames: Array<string>,
   filtersCache: FiltersCache,
-  nodesPerValueArrs: Array<Array<IGatsbyNode>>
+  nodesPerValueArrs: Array<Array<GatsbyNodeDescriptor>>
 ): boolean {
   const {
     path: filterPath,
@@ -265,7 +271,7 @@ function collectBucketForElemMatch(
   filter: IDbQueryElemMatch,
   nodeTypeNames: Array<string>,
   filtersCache: FiltersCache,
-  nodesPerValueArrs: Array<Array<IGatsbyNode>>
+  nodesPerValueArrs: Array<Array<GatsbyNodeDescriptor>>
 ): boolean {
   // Get comparator and target value for this elemMatch
   let comparator: FilterOp = `$eq` // (Must be overridden but TS requires init)
@@ -345,8 +351,9 @@ export function runFastFiltersAndSort(
     resolvedFields,
     stats
   )
+  return result
 
-  return sortNodes(result, sort, resolvedFields, stats)
+  // return sortNodes(result, sort, resolvedFields, stats)
 }
 
 /**
@@ -359,7 +366,7 @@ function convertAndApplyFastFilters(
   filtersCache: FiltersCache,
   resolvedFields: Record<string, any>,
   stats: IGraphQLRunnerStats
-): Array<IGatsbyNode> | null {
+): Array<GatsbyNodeDescriptor> | null {
   const filters = filterFields
     ? prefixResolvedFields(
         createDbQueriesFromObject(prepareQueryArgs(filterFields)),
@@ -391,7 +398,9 @@ function convertAndApplyFastFilters(
     // If there's a filter, there (now) must be an entry for this cache key
     const filterCache = filtersCache.get(filterCacheKey) as IFilterCache
     // If there is no filter then the ensureCache step will populate this:
-    const cache = filterCache.meta.orderedByCounter as Array<IGatsbyNode>
+    const cache = filterCache.meta.orderedByCounter as Array<
+      GatsbyNodeDescriptor
+    >
 
     if (firstOnly || cache.length) {
       return cache.slice(0)
@@ -409,7 +418,7 @@ function convertAndApplyFastFilters(
     if (firstOnly) {
       return result.slice(0, 1)
     }
-    return result
+    return result.slice(0)
   }
 
   if (stats) {

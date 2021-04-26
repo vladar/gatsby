@@ -45,6 +45,8 @@ import {
 import { updateSiteMetadata, isTruthy } from "gatsby-core-utils"
 import { syncWebpackArtifacts } from "../db/nodes-db"
 
+const ptop = require(`process-top`)()
+
 module.exports = async function build(program: IBuildArgs): Promise<void> {
   if (isTruthy(process.env.VERBOSE)) {
     program.verbose = true
@@ -98,14 +100,19 @@ module.exports = async function build(program: IBuildArgs): Promise<void> {
       store,
       graphqlRunner,
     })
-  } else {
-    await runPageQueries({
-      queryIds,
-      graphqlRunner,
-      parentSpan: buildSpan,
-      store,
-    })
   }
+
+  await runPageQueries({
+    queryIds,
+    graphqlRunner,
+    parentSpan: buildSpan,
+    store,
+  })
+
+  global.gc()
+  await new Promise(resolve => setTimeout(resolve, 5000))
+  console.log(ptop.toString())
+  process.exit(0)
 
   let stats
   if (!process.env.GATSBY_REPLICA) {

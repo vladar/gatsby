@@ -310,7 +310,7 @@ class LocalNodeModel {
     if (firstOnly) {
       if (result?.length > 0) {
         result = result[0]
-        this.trackInlineObjectsInRootNode(result)
+        // this.trackInlineObjectsInRootNode(result)
       } else {
         result = null
 
@@ -323,7 +323,7 @@ class LocalNodeModel {
         pageDependencies.connectionType = gqlType.name
       }
     } else if (result) {
-      result.forEach(node => this.trackInlineObjectsInRootNode(node))
+      // result.forEach(node => this.trackInlineObjectsInRootNode(node))
     }
 
     if (trackInlineObjectsActivity) {
@@ -334,7 +334,8 @@ class LocalNodeModel {
     if (!firstOnly && typeof pageDependencies.connectionType === `undefined`) {
       pageDependencies.connectionType = gqlType.name
     }
-    return this.trackPageDependencies(result, pageDependencies)
+    return result
+    // return this.trackPageDependencies(result, pageDependencies)
   }
 
   prepareNodes(type, queryFields, fieldsToResolve, nodeTypeNames) {
