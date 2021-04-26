@@ -90,11 +90,9 @@ reducers are still in-memory.
 | 1,000,000  | 151.341         | 934     | 166           | 575            | 173     |
 | 10,000,000 | 1787.643        | 2900    | 766           | 1400           | 173     |
 
-Peak memory for 10 millions nodes was `3005 MB`, LMDB file on disk is `5.6G`.
+Peak memory for 10 millions nodes was `3005 MB`.
 
-To put those numbers in perspective: the same 10 millions of
-nodes recorded directly to `lmdb-store` took `220s`.
-
+To put those numbers in perspective: the same 10 millions of nodes recorded directly to `lmdb-store` took `220s`.
 So the remaining `1567s` are spent somewhere in `createNode` and our redux
 (we query LMDB there too).
 
