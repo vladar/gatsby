@@ -27,6 +27,7 @@ import {
   getNode,
 } from "./nodes"
 import { IGraphQLRunnerStats } from "../query/types"
+import { ensureIndex, queryNodes } from "../db/nodes-db"
 
 // The value is an object with arbitrary keys that are either filter values or,
 // recursively, an object with the same struct. Ie. `{a: {a: {a: 2}}}`
@@ -46,6 +47,8 @@ interface IRunFilterArg {
     sort:
       | { fields: Array<string>; order: Array<boolean | "asc" | "desc"> }
       | undefined
+    limit: number
+    skip?: number
   }
   firstOnly: boolean
   resolvedFields: Record<string, any>
@@ -331,11 +334,11 @@ function collectBucketForElemMatch(
  * @returns Collection of results. Collection will be limited to 1
  *   if `firstOnly` is true
  */
-export function runFastFiltersAndSort(
+export async function runFastFiltersAndSort(
   args: IRunFilterArg
-): Array<IGatsbyNode> | null {
+): Promise<Array<IGatsbyNode> | null> {
   const {
-    queryArgs: { filter, sort } = {},
+    queryArgs: { filter, sort, limit = 0, skip = 0 } = {},
     resolvedFields = {},
     firstOnly = false,
     nodeTypeNames,
@@ -343,8 +346,11 @@ export function runFastFiltersAndSort(
     stats,
   } = args
 
-  const result = convertAndApplyFastFilters(
+  const result = await convertAndApplyFastFilters(
     filter,
+    sort,
+    limit,
+    skip,
     firstOnly,
     nodeTypeNames,
     filtersCache,
@@ -359,14 +365,19 @@ export function runFastFiltersAndSort(
 /**
  * Return a collection of results. Collection will be limited to 1 if `firstOnly` is true
  */
-function convertAndApplyFastFilters(
+async function convertAndApplyFastFilters(
   filterFields: Array<IInputQuery> | undefined,
+  sort:
+    | { fields: Array<string>; order: Array<boolean | "asc" | "desc"> }
+    | undefined,
+  limit: number,
+  skip: number,
   firstOnly: boolean,
   nodeTypeNames: Array<string>,
   filtersCache: FiltersCache,
   resolvedFields: Record<string, any>,
   stats: IGraphQLRunnerStats
-): Array<GatsbyNodeDescriptor> | null {
+): Promise<Array<IGatsbyNode> | null> {
   const filters = filterFields
     ? prefixResolvedFields(
         createDbQueriesFromObject(prepareQueryArgs(filterFields)),
@@ -389,44 +400,58 @@ function convertAndApplyFastFilters(
     }
   }
 
-  if (filters.length === 0) {
-    const filterCacheKey = createFilterCacheKey(nodeTypeNames, null)
-    if (!filtersCache.has(filterCacheKey)) {
-      ensureEmptyFilterCache(filterCacheKey, nodeTypeNames, filtersCache)
-    }
+  if (limit <= 0) {
+    throw new Error(`Unexpected limit: ${limit}`)
+  }
+  if (nodeTypeNames.length !== 1) {
+    throw new Error(`Not supported yet`)
+  }
+  if (filters.length !== 1 || filters[0].path.length !== 1) {
+    throw new Error(`Not supported yet`)
+  }
+  const nodeTypeName = nodeTypeNames[0]
+  const filterField: string = filters[0].path[0]
+  const query = filters[0].query
 
-    // If there's a filter, there (now) must be an entry for this cache key
-    const filterCache = filtersCache.get(filterCacheKey) as IFilterCache
-    // If there is no filter then the ensureCache step will populate this:
-    const cache = filterCache.meta.orderedByCounter as Array<
-      GatsbyNodeDescriptor
-    >
-
-    if (firstOnly || cache.length) {
-      return cache.slice(0)
-    }
-
-    return null
+  if (!sort) {
+    sort = { fields: [filterField], order: [`asc`] }
   }
 
-  const result = applyFastFilters(filters, nodeTypeNames, filtersCache)
-
-  if (result) {
-    if (stats) {
-      stats.totalIndexHits++
+  // create functions that return the item to compare on
+  const dottedFields = objectToDottedField(resolvedFields)
+  const dottedFieldKeys = Object.keys(dottedFields)
+  const sortFields = sort.fields.map(field => {
+    if (
+      dottedFields[field] ||
+      dottedFieldKeys.some(key => field.startsWith(key))
+    ) {
+      return `__gatsby_resolved.${field}`
+    } else {
+      return field
     }
-    if (firstOnly) {
-      return result.slice(0, 1)
-    }
-    return result.slice(0)
-  }
+  })
 
-  if (stats) {
-    // to mean, "empty results"
-    stats.totalSiftHits++
+  if (sortFields.length !== 1) {
+    throw new Error(`Not supported yet`)
   }
+  const sortField: string = sortFields[0]
 
-  return []
+  await ensureIndex(nodeTypeName, filterField, sortField)
+
+  const labelQ = `querying ${nodeTypeName}.${filterField} ${query.comparator} ${query.value} (sort: ${sortField}, limit: ${limit}, offset: ${skip})`
+  // console.time(labelQ)
+  const result = await queryNodes(
+    nodeTypeName,
+    filterField,
+    sortField,
+    firstOnly ? 1 : limit,
+    skip,
+    query
+  )
+  // console.timeEnd(labelQ)
+  const tmp = result.asArray ?? []
+  // console.log(tmp)
+  return tmp
 }
 
 function filterToStats(

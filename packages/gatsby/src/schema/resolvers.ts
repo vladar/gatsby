@@ -25,7 +25,6 @@ import {
   IGatsbyResolverContext,
 } from "./type-definitions"
 import { IGatsbyNode } from "../redux/types"
-import { getNode } from "../redux/nodes"
 
 type ResolvedLink = IGatsbyNode | Array<IGatsbyNode> | null
 
@@ -277,15 +276,13 @@ export function paginate<NodeType>(
 
   return {
     totalCount: count,
-    edges: items
-      .map(([id]) => getNode(id))
-      .map((item, i, arr) => {
-        return {
-          node: item,
-          next: arr[i + 1],
-          previous: arr[i - 1],
-        }
-      }),
+    edges: items.map((item, i, arr) => {
+      return {
+        node: item,
+        next: arr[i + 1],
+        previous: arr[i - 1],
+      }
+    }),
     nodes: items,
     pageInfo: {
       currentPage,

@@ -12,6 +12,7 @@ interface IDatabases {
   staticQueriesByTemplate: Database<Array<string>, string>
   metadata: Database<string, string>
   pages: Database<ICreatePageAction, string>
+  indexes: Database<string, Array<any>>
 }
 
 const rootDbFile =
@@ -31,7 +32,7 @@ function getRootDb(): RootDatabase {
       sharedStructuresKey: Symbol.for(`structures`),
       // commitDelay: 100,
       maxDbs: 12,
-      noSync: true, // FIXME: remove this when switching to batched writes
+      // noSync: true, // FIXME: remove this when switching to batched writes
       readOnly,
       // FIXME: `create: true` by default; but it fails with replica
       // @ts-ignore
@@ -65,6 +66,15 @@ function getDatabases(): IDatabases {
       // @ts-ignore
       nodesByType: rootDb.openDB({
         name: `nodesByType`,
+        // @ts-ignore
+        dupSort: true,
+        // @ts-ignore
+        readOnly,
+        create: !readOnly,
+      }),
+      // @ts-ignore
+      indexes: rootDb.openDB({
+        name: `indexes`,
         // @ts-ignore
         dupSort: true,
         // @ts-ignore
@@ -124,13 +134,15 @@ export function getNodes(
 
 export function getNodesByType(type: string): Array<IGatsbyNode> {
   // TODO: deprecate
+  return Array.from(iterateNodesByType(type))
+}
+
+function iterateNodesByType(type: string): ArrayLikeIterable<IGatsbyNode> {
   const nodesByType = getDatabases().nodesByType
-  const nodesIterable = nodesByType
+  return nodesByType
     .getValues(type)
     .map(nodeId => getNode(nodeId))
-    .filter(Boolean)
-
-  return Array.from(nodesIterable as ArrayLikeIterable<IGatsbyNode>)
+    .filter(Boolean) as ArrayLikeIterable<IGatsbyNode>
 }
 
 export function getNode(id: string): IGatsbyNode | undefined {
@@ -464,4 +476,126 @@ export async function syncPages(): Promise<void> {
   })
 
   console.log(`Synced ${count} pages. Got ${badCount} actions.`)
+}
+
+const indexPromises: { [key: string]: Promise<any> } = {}
+
+export function ensureIndex(
+  typeName: string,
+  filterField: string,
+  sortField: string
+): Promise<void> {
+  // This whole implementation is a toy - just for a quick test
+  const { indexes } = getDatabases()
+
+  const key = `${typeName}.${filterField}:${sortField}`
+
+  if (indexPromises[key]) {
+    return indexPromises[key]
+  }
+  indexPromises[key] = new Promise(resolve => {
+    const label = `Indexing ${key}`
+    console.time(label)
+    let promise
+    const assertValidValue = (field: string, value: any, id: string): void => {
+      if (
+        typeof value !== `number` &&
+        typeof value !== `string` &&
+        typeof value !== `undefined`
+      ) {
+        throw new Error(
+          `Unexpected type of "${typeName}.${field}" (node.id: ${id}): ${typeof value}`
+        )
+      }
+    }
+    iterateNodesByType(typeName).forEach(node => {
+      const value = node[filterField]
+      const sortValue = node[sortField]
+      assertValidValue(filterField, value, node.id)
+      assertValidValue(sortField, sortValue, node.id)
+      const cacheKey = [typeName, filterField, value, sortValue]
+      promise = indexes.put(cacheKey, node.id)
+    })
+    console.timeEnd(label)
+    resolve(promise)
+  })
+  return indexPromises[key]
+}
+
+export async function queryNodes(
+  typeName: string,
+  filterField: string,
+  // @ts-ignore
+  sortField: string,
+  limit: number = 60,
+  offset: number,
+  query: { comparator: string; value: any }
+): Promise<ArrayLikeIterable<IGatsbyNode>> {
+  const { indexes } = getDatabases()
+
+  switch (query.comparator) {
+    case `$eq`: {
+      const key = [typeName, filterField, query.value]
+      return indexes
+        .getRange({ start: key, limit: 1 })
+        .map(({ value }) => getNode(value))
+        .filter(Boolean) as ArrayLikeIterable<IGatsbyNode>
+    }
+    case `$in`: {
+      const results = query.value.map((val: string) => {
+        const key = [typeName, filterField, val]
+        return indexes
+          .getRange({ start: key, limit: 1 })
+          .map(({ value }) => value)
+      })
+
+      // Hack to get ArrayLikeIterable (as it is not exported by lmdb-store)
+      const ArrayLikeIterable = results[0].constructor
+      const result = new ArrayLikeIterable(mergeSorted(results[0], results[1]))
+
+      return result.map(id => getNode(id)).filter(Boolean)
+    }
+    case `$gt`: {
+      const key = [typeName, filterField, query.value]
+      return indexes
+        .getRange({ start: key, limit, offset })
+        .map(({ value }) => getNode(value))
+        .filter(Boolean) as ArrayLikeIterable<IGatsbyNode>
+    }
+  }
+  throw new Error(`Unsupported comparator: ${query.comparator}`)
+}
+
+// Merge two originally sorted iterables:
+function* mergeSorted(iterable1: any, iterable2: any): any {
+  const iter1 = iterable1[Symbol.iterator]()
+  const iter2 = iterable2[Symbol.iterator]()
+  let a = iter1.next()
+  let b = iter2.next()
+  let isFirst
+
+  while (!a.done && !b.done) {
+    if (a.value <= b.value) {
+      yield a.value
+      isFirst = true
+    } else {
+      yield b.value
+      isFirst = false
+    }
+
+    if (isFirst) {
+      a = iter1.next()
+    } else {
+      b = iter2.next()
+    }
+  }
+
+  while (!a.done) {
+    yield a.value
+    a = iter1.next()
+  }
+  while (!b.done) {
+    yield b.value
+    b = iter2.next()
+  }
 }
