@@ -40,7 +40,7 @@ exports.sourceNodes = async ({ actions: { createNode } }) => {
         contentDigest: String(nodeNum),
       },
     })
-    if (nodeNum % 100 === 0) {
+    if (nodeNum % 50 === 0) {
       await new Promise(resolve => setTimeout(resolve, 3))
     }
   }

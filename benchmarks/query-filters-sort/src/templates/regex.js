@@ -9,12 +9,11 @@ export default ({ data }) => {
 }
 
 export const query = graphql`
-  query($limit: Int, $skip: Int, $regex: String, $sort: TestSortInput) {
+  query($limit: Int, $regex: String, $sort: TestSortInput) {
     allTest(
       filter: { id: { regex: $regex } }
       sort: $sort
       limit: $limit
-      skip: $skip
     ) {
       nodes {
         nodeNum
