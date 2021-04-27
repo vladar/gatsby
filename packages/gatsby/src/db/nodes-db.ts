@@ -536,38 +536,53 @@ export async function queryNodes(
   switch (query.comparator) {
     case `$eq`: {
       const key = [typeName, filterField, query.value]
+      const match = indexes.getKeys({ start: key, limit: 1 }).asArray[0]
+
       return indexes
-        .getRange({ start: key, limit: 1 })
-        .map(({ value }) => getNode(value))
+        .getValues(match, { limit })
+        .map(id => getNode(id))
         .filter(Boolean) as ArrayLikeIterable<IGatsbyNode>
     }
     case `$in`: {
-      const results = query.value.map((val: string) => {
+      const buckets = query.value.map((val: string) => {
         const key = [typeName, filterField, val]
-        return indexes
-          .getRange({ start: key, limit: 1 })
-          .map(({ value }) => value)
-      })
+        const match = indexes.getKeys({ start: key, limit: 1 }).asArray[0]
 
+        return indexes.getValues(match, { limit })
+      })
       // Hack to get ArrayLikeIterable (as it is not exported by lmdb-store)
-      const ArrayLikeIterable = results[0].constructor
-      const result = new ArrayLikeIterable(mergeSorted(results[0], results[1]))
+      const ArrayLikeIterable = buckets[0].constructor
+      const result = new ArrayLikeIterable(mergeSortedAll(...buckets))
 
       return result.map(id => getNode(id)).filter(Boolean)
     }
     case `$gt`: {
       const key = [typeName, filterField, query.value]
-      return indexes
-        .getRange({ start: key, limit, offset })
-        .map(({ value }) => getNode(value))
-        .filter(Boolean) as ArrayLikeIterable<IGatsbyNode>
+      const buckets = indexes
+        .getKeys({ start: key, limit })
+        .asArray.map(key => indexes.getValues(key, { limit }))
+
+      // Hack to get ArrayLikeIterable (as it is not exported by lmdb-store)
+      const ArrayLikeIterable = buckets[0].constructor
+      // @ts-ignore
+      const result = new ArrayLikeIterable(mergeSortedAll(...buckets))
+
+      return result.map(id => getNode(id)).filter(Boolean)
     }
   }
   throw new Error(`Unsupported comparator: ${query.comparator}`)
 }
 
+function mergeSortedAll(...iterables: any): Iterable<any> {
+  let final
+  for (const iterable of iterables) {
+    final = mergeSorted(final ?? [], iterable)
+  }
+  return final ?? []
+}
+
 // Merge two originally sorted iterables:
-function* mergeSorted(iterable1: any, iterable2: any): any {
+function* mergeSorted(iterable1: any, iterable2: any): Generator {
   const iter1 = iterable1[Symbol.iterator]()
   const iter2 = iterable2[Symbol.iterator]()
   let a = iter1.next()
