@@ -531,7 +531,7 @@ export async function queryNodes(
   offset: number,
   query: { comparator: string; value: any }
 ): Promise<ArrayLikeIterable<IGatsbyNode>> {
-  const { indexes } = getDatabases()
+  const { indexes, nodesByType } = getDatabases()
 
   switch (query.comparator) {
     case `$eq`: {
@@ -568,6 +568,17 @@ export async function queryNodes(
       const result = new ArrayLikeIterable(mergeSortedAll(...buckets))
 
       return result.map(id => getNode(id)).filter(Boolean)
+    }
+    case `$regex`: {
+      const regex = query.value
+      return nodesByType
+        .getValues(typeName, { offset })
+        .map(id => getNode(id))
+        .filter(node =>
+          node && node[filterField]
+            ? regex.test(String(node[filterField]))
+            : false
+        ) as ArrayLikeIterable<IGatsbyNode>
     }
   }
   throw new Error(`Unsupported comparator: ${query.comparator}`)
