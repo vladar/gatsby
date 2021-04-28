@@ -173,9 +173,10 @@ const updateSchemaComposer = async ({
     inferenceMetadata,
     parentSpan: activity.span,
   })
-  addInferredChildOfExtensions({
-    schemaComposer,
-  })
+  // FIXME: This loops through all nodes under the hood
+  // addInferredChildOfExtensions({
+  //   schemaComposer,
+  // })
   activity.end()
 
   activity = report.phantomActivity(`Processing types`, {
@@ -737,7 +738,7 @@ const addSetFieldsOnGraphQLNodeTypeFields = ({ schemaComposer, parentSpan }) =>
         const result = await apiRunner(`setFieldsOnGraphQLNodeType`, {
           type: {
             name: typeName,
-            nodes: getNodesByType(typeName),
+            nodes: getNodesByType(typeName, false),
           },
           traceId: `initial-setFieldsOnGraphQLNodeType`,
           parentSpan,

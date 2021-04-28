@@ -132,9 +132,13 @@ export function getNodes(
   return nodesIterable as ArrayLikeIterable<IGatsbyNode>
 }
 
-export function getNodesByType(type: string): Array<IGatsbyNode> {
+export function getNodesByType(
+  type: string,
+  asArray: boolean = true
+): Array<IGatsbyNode> | ArrayLikeIterable<IGatsbyNode> {
   // TODO: deprecate
-  return Array.from(iterateNodesByType(type))
+  const iter = iterateNodesByType(type)
+  return asArray ? iter.asArray : iter
 }
 
 function iterateNodesByType(type: string): ArrayLikeIterable<IGatsbyNode> {

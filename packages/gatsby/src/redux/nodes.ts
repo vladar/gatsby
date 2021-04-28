@@ -83,8 +83,11 @@ export const getNode = (id: string): IGatsbyNode | undefined => db.getNode(id)
 /**
  * Get all nodes of type from redux store.
  */
-export const getNodesByType = (type: string): Array<IGatsbyNode> =>
-  db.getNodesByType(type)
+export const getNodesByType = (
+  type: string,
+  asArray = true
+): Array<IGatsbyNode> | ArrayLikeIterable<IGatsbyNode> =>
+  db.getNodesByType(type, asArray)
 
 /**
  * Get all type names from redux store.

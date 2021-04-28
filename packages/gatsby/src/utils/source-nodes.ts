@@ -9,6 +9,7 @@ const { deleteNode } = actions
 import { Node } from "../../index"
 import { syncNodes, waitDbCommit } from "../db/nodes-db"
 import { replicateStore } from "../db/replication"
+import { ArrayLikeIterable } from "lmdb-store"
 
 /**
  * Finds the name of all plugins which implement Gatsby APIs that
@@ -52,7 +53,10 @@ function warnForPluginsWithoutNodes(
 /**
  * Return the set of nodes for which its root node has not been touched
  */
-function getStaleNodes(state: IGatsbyState, nodes: Array<Node>): Array<Node> {
+function getStaleNodes(
+  state: IGatsbyState,
+  nodes: Array<Node> | ArrayLikeIterable<Node>
+): Array<Node> | ArrayLikeIterable<Node> {
   return nodes.filter(node => {
     let rootNode = node
     let next: Node | undefined = undefined
@@ -79,12 +83,15 @@ function getStaleNodes(state: IGatsbyState, nodes: Array<Node>): Array<Node> {
 /**
  * Find all stale nodes and delete them
  */
-function deleteStaleNodes(state: IGatsbyState, nodes: Array<Node>): void {
+function deleteStaleNodes(
+  state: IGatsbyState,
+  nodes: Array<Node> | ArrayLikeIterable<Node>
+): void {
   const staleNodes = getStaleNodes(state, nodes)
 
-  if (staleNodes.length > 0) {
-    staleNodes.forEach(node => store.dispatch(deleteNode(node)))
-  }
+  // if (staleNodes.length > 0) {
+  staleNodes.forEach(node => store.dispatch(deleteNode(node)))
+  // }
 }
 
 export default async ({
@@ -117,9 +124,10 @@ export default async ({
   }
 
   const state = store.getState()
-  const nodes = getNodes()
+  const nodes = getNodes(false)
 
-  warnForPluginsWithoutNodes(state, nodes)
+  // FIXME: This loops through all nodes
+  // warnForPluginsWithoutNodes(state, nodes)
 
   deleteStaleNodes(state, nodes)
 

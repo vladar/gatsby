@@ -65,7 +65,7 @@ const buildInferenceMetadata = ({ types }) =>
         type: `BUILD_TYPE_METADATA`,
         payload: {
           typeName,
-          nodes: getNodesByType(typeName),
+          nodes: getNodesByType(typeName, false),
         },
       })
       if (typeNames.length > 0) {

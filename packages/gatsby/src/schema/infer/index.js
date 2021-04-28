@@ -88,8 +88,13 @@ const addInferredType = ({
     typeComposer.getExtension(`createdFrom`) === `inference` &&
     hasNodes(inferenceMetadata.typeMap[typeName])
   ) {
-    const nodes = getNodesByType(typeName)
-    typeComposer.setExtension(`plugin`, nodes[0].internal.owner)
+    let firstNode
+    for (firstNode of getNodesByType(typeName, false)) {
+      break
+    }
+    if (firstNode) {
+      typeComposer.setExtension(`plugin`, firstNode.internal.owner)
+    }
   }
 
   const exampleValue = getExampleObject({

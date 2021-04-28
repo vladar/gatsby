@@ -62,6 +62,7 @@ import { is32BitInteger } from "../../utils/is-32-bit-integer"
 import { looksLikeADate } from "../types/date"
 import { Node } from "../../../index"
 import { TypeConflictReporter } from "./type-conflict-reporter"
+import { ArrayLikeIterable } from "lmdb-store"
 
 export interface ITypeInfo {
   first?: string
@@ -476,8 +477,14 @@ const deleteNode = (metadata: ITypeMetadata, node: Node): ITypeMetadata =>
   updateTypeMetadata(metadata, `del`, node)
 const addNodes = (
   metadata = initialMetadata(),
-  nodes: Array<Node>
-): ITypeMetadata => nodes.reduce(addNode, metadata)
+  nodes: Array<Node> | ArrayLikeIterable<Node>
+): ITypeMetadata => {
+  let state = metadata
+  nodes.forEach(node => {
+    state = addNode(state, node)
+  })
+  return state
+}
 
 const possibleTypes = (descriptor: IValueDescriptor = {}): Array<ValueType> =>
   Object.keys(descriptor).filter(type => descriptor[type].total > 0) as Array<
